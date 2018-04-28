@@ -1,0 +1,85 @@
+diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
+index a811fcb..c498020 100644
+--- a/include/flatbuffers/idl.h
++++ b/include/flatbuffers/idl.h
+@@ -451,12 +451,15 @@ struct IDLOptions {
+ 
+ // This encapsulates where the parser is in the current source file.
+ struct ParserState {
+-  ParserState() : cursor_(nullptr), line_(1), token_(-1) {}
++  ParserState() : cursor_(nullptr), line_(1), token_(-1), has_size_(false), len_(0), eof_(nullptr) {}
+ 
+  protected:
+   const char *cursor_;
+   int line_;  // the current line being parsed
+   int token_;
++  bool has_size_;
++  unsigned int len_;
++  const char *eof_;
+ 
+   std::string attribute_;
+   std::vector<std::string> doc_comment_;
+@@ -565,6 +568,9 @@ class Parser : public ParserState {
+   bool Parse(const char *_source, const char **include_paths = nullptr,
+              const char *source_filename = nullptr);
+ 
++  // Set the maximum size to process.
++  void SetSize(const bool has_size, const unsigned int len);
++
+   // Set the root type. May override the one set in the schema.
+   bool SetRootType(const char *name);
+ 
+diff --git a/src/idl_parser.cpp b/src/idl_parser.cpp
+index b16e3e1..567ce41 100644
+--- a/src/idl_parser.cpp
++++ b/src/idl_parser.cpp
+@@ -262,6 +262,10 @@ CheckedError Parser::Next() {
+   bool seen_newline = false;
+   attribute_.clear();
+   for (;;) {
++    if (has_size_ && cursor_ >= eof_) {
++      token_ = kTokenEof;
++      return NoError();
++    }
+     char c = *cursor_++;
+     token_ = c;
+     switch (c) {
+@@ -1748,6 +1752,11 @@ CheckedError Parser::ParseService() {
+   return NoError();
+ }
+ 
++void Parser::SetSize(const bool has_size, const unsigned int len) {
++  has_size_ = has_size;
++  len_ = len;
++}
++
+ bool Parser::SetRootType(const char *name) {
+   root_struct_def_ = LookupStruct(name);
+   if (!root_struct_def_)
+@@ -2235,6 +2244,9 @@ CheckedError Parser::StartParseFile(const char *source,
+   file_being_parsed_ = source_filename ? source_filename : "";
+   source_ = cursor_ = source;
+   line_ = 1;
++  if (has_size_) {
++    eof_ = source + len_;
++  }
+   error_.clear();
+   ECHECK(SkipByteOrderMark());
+   NEXT();
+@@ -2374,6 +2386,8 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
+         std::string contents;
+         if (!LoadFile(filepath.c_str(), true, &contents))
+           return Error("unable to load include file: " + name);
++        bool has_size = has_size_;
++        has_size_ = false;
+         ECHECK(DoParse(contents.c_str(), include_paths, filepath.c_str(),
+                        name.c_str()));
+         // We generally do not want to output code for any included files:
+@@ -2383,6 +2397,7 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
+         root_struct_def_ = nullptr;
+         file_identifier_.clear();
+         file_extension_.clear();
++        has_size_ = has_size;
+         // This is the easiest way to continue this file after an include:
+         // instead of saving and restoring all the state, we simply start the
+         // file anew. This will cause it to encounter the same include

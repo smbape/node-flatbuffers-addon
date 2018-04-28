@@ -1,0 +1,4 @@
+/build
+/deps/flatbuffers
+/node_modules
+/project.sublime-workspace
