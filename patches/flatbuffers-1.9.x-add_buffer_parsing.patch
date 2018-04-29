@@ -1,5 +1,17 @@
+diff --git a/include/flatbuffers/code_generators.h b/include/flatbuffers/code_generators.h
+index d19002e..bd16439 100644
+--- a/include/flatbuffers/code_generators.h
++++ b/include/flatbuffers/code_generators.h
+@@ -70,6 +70,7 @@ class CodeWriter {
+ class BaseGenerator {
+  public:
+   virtual bool generate() = 0;
++  virtual std::string generateCode();
+ 
+   static std::string NamespaceDir(const Parser &parser, const std::string &path,
+                                   const Namespace &ns);
 diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
-index a811fcb..c498020 100644
+index a811fcb..d9fc21c 100644
 --- a/include/flatbuffers/idl.h
 +++ b/include/flatbuffers/idl.h
 @@ -451,12 +451,15 @@ struct IDLOptions {
@@ -29,6 +41,69 @@ index a811fcb..c498020 100644
    // Set the root type. May override the one set in the schema.
    bool SetRootType(const char *name);
  
+@@ -762,6 +768,10 @@ extern bool GenerateCPP(const Parser &parser,
+                         const std::string &path,
+                         const std::string &file_name);
+ 
++// Generate JavaScript or TypeScript code from the definitions in the Parser object.
++// See idl_gen_js.
++extern std::string GenerateJSCode(const Parser &parser);
++
+ // Generate JavaScript or TypeScript code from the definitions in the Parser object.
+ // See idl_gen_js.
+ extern bool GenerateJS(const Parser &parser,
+diff --git a/src/code_generators.cpp b/src/code_generators.cpp
+index c6bf91c..b9ee84e 100644
+--- a/src/code_generators.cpp
++++ b/src/code_generators.cpp
+@@ -67,6 +67,10 @@ const char *BaseGenerator::FlatBuffersGeneratedWarning() {
+          " do not modify";
+ }
+ 
++std::string BaseGenerator::generateCode() {
++    return NULL;
++}
++
+ std::string BaseGenerator::NamespaceDir(const Parser &parser,
+                                         const std::string &path,
+                                         const Namespace &ns) {
+diff --git a/src/idl_gen_js.cpp b/src/idl_gen_js.cpp
+index c0844d4..c8a45cd 100644
+--- a/src/idl_gen_js.cpp
++++ b/src/idl_gen_js.cpp
+@@ -80,7 +80,7 @@ class JsGenerator : public BaseGenerator {
+         lang_(GetJsLangParams(parser_.opts.lang)){};
+   // Iterate through all definitions we haven't generate code for (enums,
+   // structs, and tables) and output them to a single file.
+-  bool generate() {
++  std::string generateCode() {
+     imported_fileset imported_files;
+     reexport_map reexports;
+ 
+@@ -106,7 +106,11 @@ class JsGenerator : public BaseGenerator {
+       code += "// Exports for Node.js and RequireJS\n";
+       code += exports_code;
+     }
++    return code;
++  }
+ 
++  bool generate() {
++    std::string code = generateCode();
+     return SaveFile(GeneratedFileName(path_, file_name_, lang_).c_str(), code,
+                     false);
+   }
+@@ -1173,6 +1177,11 @@ class JsGenerator : public BaseGenerator {
+ };
+ }  // namespace js
+ 
++std::string GenerateJSCode(const Parser &parser) {
++    js::JsGenerator generator(parser, "", "");
++    return generator.generateCode();
++}
++
+ bool GenerateJS(const Parser &parser, const std::string &path,
+                 const std::string &file_name) {
+   js::JsGenerator generator(parser, path, file_name);
 diff --git a/src/idl_parser.cpp b/src/idl_parser.cpp
 index b16e3e1..567ce41 100644
 --- a/src/idl_parser.cpp

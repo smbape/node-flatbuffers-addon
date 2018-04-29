@@ -13,7 +13,7 @@ using namespace node;
 
 namespace NODE_GYP_MODULE_NAME {
 
-#define GET_STRING_OPT(name, identifier)                        \
+#define ASSERT_GET_STRING_OPT(options, opt, name, identifier)   \
     opt = Local<String>(New<String>(name).ToLocalChecked());    \
     if (!options->Has(opt)) {                                   \
         ThrowTypeError(name " option is required");             \
@@ -27,7 +27,7 @@ namespace NODE_GYP_MODULE_NAME {
     }                                                           \
     String::Utf8Value identifier(value)
 
-#define GET_BUFFER_OPT(name, identifier)                        \
+#define ASSERT_GET_BUFFER_OPT(options, opt, name, identifier)   \
     opt = Local<String>(New<String>(name).ToLocalChecked());    \
     if (!options->Has(opt)) {                                   \
         ThrowTypeError(name " option is required");             \
@@ -41,7 +41,7 @@ namespace NODE_GYP_MODULE_NAME {
     }                                                           \
     char* identifier = (char*) Buffer::Data(value->ToObject())
 
-#define GET_UINT32_OPT(name, identifier)                        \
+#define ASSERT_GET_UINT32_OPT(options, opt, name, identifier)   \
     opt = Local<String>(New<String>(name).ToLocalChecked());    \
     if (!options->Has(opt)) {                                   \
         ThrowTypeError(name " option is required");             \
@@ -55,7 +55,7 @@ namespace NODE_GYP_MODULE_NAME {
     }                                                           \
     unsigned int identifier = value->Uint32Value()
 
-#define GET_STRING_ARRAY_OPT(name, identifier)                  \
+#define ASSERT_GET_STRING_ARRAY_OPT(options, opt, name, identifier)\
     opt = Local<String>(New<String>(name).ToLocalChecked());    \
     if (!options->Has(opt)) {                                   \
         ThrowTypeError(name " option is required");             \
@@ -82,7 +82,7 @@ namespace NODE_GYP_MODULE_NAME {
         identifier.push_back(std::string(*utf8str).c_str());    \
     }
 
-#define GET_BOOLEAN_OPT(name, identifier)                       \
+#define ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier)  \
     opt = Local<String>(New<String>(name).ToLocalChecked());    \
     if (!options->Has(opt)) {                                   \
         ThrowTypeError(name " option is required");             \
@@ -96,22 +96,20 @@ namespace NODE_GYP_MODULE_NAME {
     }                                                           \
     bool identifier = value->BooleanValue()
 
-#define SET_BOOLEAN_OPT(name, identifier)                       \
+#define SET_BOOLEAN_OPT(options, opt, opts, name, identifier)   \
     opt = Local<String>(New<String>(name).ToLocalChecked());    \
     if (options->Has(opt)) {                                    \
-        GET_BOOLEAN_OPT(name, identifier);                      \
+        ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier); \
         opts.identifier = identifier;                           \
     }
 
-static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename,
-                      const char *contents,
-                      std::vector<const char *> &include_directories) {
+static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename, const char *contents, std::vector<const char *> &include_directories) {
     auto local_include_directory = flatbuffers::StripFileName(filename);
     include_directories.push_back(local_include_directory.c_str());
     include_directories.push_back(nullptr);
-    if (!parser.Parse(contents, &include_directories[0],
-                      filename.c_str()))
+    if (!parser.Parse(contents, &include_directories[0], filename.c_str())) {
         return false;
+    }
     include_directories.pop_back();
     include_directories.pop_back();
     return true;
@@ -130,24 +128,24 @@ NAN_METHOD(GenerateBinary) {
     Local<Value> value;
     Local<Array> array;
 
-    GET_STRING_OPT("schema", schema);
-    GET_BUFFER_OPT("schema_contents", schema_contents);
-    GET_UINT32_OPT("schema_length", schema_length);
+    ASSERT_GET_STRING_OPT(options, opt, "schema", schema);
+    ASSERT_GET_BUFFER_OPT(options, opt, "schema_contents", schema_contents);
+    ASSERT_GET_UINT32_OPT(options, opt, "schema_length", schema_length);
 
-    GET_STRING_OPT("json", json);
-    GET_BUFFER_OPT("json_contents", json_contents);
-    GET_UINT32_OPT("json_length", json_length);
+    ASSERT_GET_STRING_OPT(options, opt, "json", json);
+    ASSERT_GET_BUFFER_OPT(options, opt, "json_contents", json_contents);
+    ASSERT_GET_UINT32_OPT(options, opt, "json_length", json_length);
 
-    GET_STRING_ARRAY_OPT("include_directories", include_directories);
+    ASSERT_GET_STRING_ARRAY_OPT(options, opt, "include_directories", include_directories);
 
     flatbuffers::IDLOptions opts;
     opts.lang = flatbuffers::IDLOptions::kBinary;
 
-    SET_BOOLEAN_OPT("strict_json", strict_json);
-    SET_BOOLEAN_OPT("allow_non_utf8", allow_non_utf8);
-    SET_BOOLEAN_OPT("skip_unexpected_fields_in_json", skip_unexpected_fields_in_json);
-    SET_BOOLEAN_OPT("union_value_namespacing", union_value_namespacing);
-    SET_BOOLEAN_OPT("binary_schema_comments", binary_schema_comments);
+    SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
+    SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
+    SET_BOOLEAN_OPT(options, opt, opts, "skip_unexpected_fields_in_json", skip_unexpected_fields_in_json);
+    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
+    SET_BOOLEAN_OPT(options, opt, opts, "binary_schema_comments", binary_schema_comments);
 
     std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
 
@@ -157,14 +155,13 @@ NAN_METHOD(GenerateBinary) {
         return;
     }
 
-    opt = Local<String>(New<String>("conform").ToLocalChecked());
-    if (options->Has(opt)) {
-        GET_STRING_OPT("conform", conform);
+    if (options->Has(Local<String>(New<String>("conform").ToLocalChecked()))) {
+        ASSERT_GET_STRING_OPT(options, opt, "conform", conform);
 
-        if (std::string(*conform).empty()) {
-            GET_BUFFER_OPT("conform_contents", conform_contents);
-            GET_UINT32_OPT("conform_length", conform_length);
-            GET_STRING_ARRAY_OPT("conform_include_directories", conform_include_directories);
+        if (!std::string(*conform).empty()) {
+            ASSERT_GET_BUFFER_OPT(options, opt, "conform_contents", conform_contents);
+            ASSERT_GET_UINT32_OPT(options, opt, "conform_length", conform_length);
+            ASSERT_GET_STRING_ARRAY_OPT(options, opt, "conform_include_directories", conform_include_directories);
 
             flatbuffers::Parser conform_parser;
             conform_parser.SetSize(true, conform_length);
@@ -179,19 +176,24 @@ NAN_METHOD(GenerateBinary) {
         }
     }
 
-    if (options->Has(Local<String>(New<String>("schema_binary").ToLocalChecked()))) {
-        GET_BOOLEAN_OPT("schema_binary", schema_binary);
+    bool schema_binary = false;
 
-        if (schema_binary) {
+    if (options->Has(Local<String>(New<String>("schema_binary").ToLocalChecked()))) {
+        ASSERT_GET_BOOLEAN_OPT(options, opt, "schema_binary", schema_binary_);
+        schema_binary = schema_binary_;
+
+        if (schema_binary_) {
             parser->Serialize();
             parser->file_extension_ = reflection::SchemaExtension();
         }
     }
 
-    parser->SetSize(true, json_length);
-    if (!ParseFile(*parser.get(), std::string(*json), json_contents, include_directories)) {
-        ThrowTypeError(parser->error_.c_str());
-        return;
+    if (!schema_binary) {
+        parser->SetSize(true, json_length);
+        if (!ParseFile(*parser.get(), std::string(*json), json_contents, include_directories)) {
+            ThrowTypeError(parser->error_.c_str());
+            return;
+        }
     }
 
     Local<Object> ret;
@@ -199,7 +201,8 @@ NAN_METHOD(GenerateBinary) {
     if (parser->builder_.GetSize() != 0) {
         char *buffer = reinterpret_cast<char *>(parser->builder_.GetBufferPointer());
         size_t len = parser->builder_.GetSize();
-        ret = CopyBuffer(buffer, len).ToLocalChecked();
+        ret = CopyBuffer(buffer, len).ToLocalChecked(); // Make v8 allocator handle gc when needed
+        parser->builder_.Reset(); // Free duplicated memory
     } else {
         ret = NewBuffer(0).ToLocalChecked();
     }
@@ -207,10 +210,86 @@ NAN_METHOD(GenerateBinary) {
     info.GetReturnValue().Set(ret);
 }
 
+NAN_METHOD(GenerateJs) {
+    Nan::HandleScope scope;
+
+    if (!info[0]->IsObject()) {
+        ThrowTypeError("First argument should be an Object.");
+        return;
+    }
+
+    Local<Object> options = info[0]->ToObject();
+    Local<String> opt;
+    Local<Value> value;
+    Local<Array> array;
+
+    ASSERT_GET_STRING_OPT(options, opt, "schema", schema);
+    ASSERT_GET_BUFFER_OPT(options, opt, "schema_contents", schema_contents);
+    ASSERT_GET_UINT32_OPT(options, opt, "schema_length", schema_length);
+
+    ASSERT_GET_STRING_ARRAY_OPT(options, opt, "include_directories", include_directories);
+
+    flatbuffers::IDLOptions opts;
+
+    opts.lang = flatbuffers::IDLOptions::kJs;
+
+    if (options->Has(Local<String>(New<String>("type").ToLocalChecked()))) {
+        ASSERT_GET_STRING_OPT(options, opt, "type", type);
+        if (std::string(*type) == "ts") {
+            opts.lang = flatbuffers::IDLOptions::kTs;
+        }
+    }
+
+    SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
+    SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
+    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
+    SET_BOOLEAN_OPT(options, opt, opts, "skip_js_exports", skip_js_exports);
+    SET_BOOLEAN_OPT(options, opt, opts, "use_goog_js_export_format", use_goog_js_export_format);
+    SET_BOOLEAN_OPT(options, opt, opts, "skip_flatbuffers_import", skip_flatbuffers_import);
+    SET_BOOLEAN_OPT(options, opt, opts, "reexport_ts_modules", reexport_ts_modules);
+
+    std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
+
+    parser->SetSize(true, schema_length);
+    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, include_directories)) {
+        ThrowTypeError(parser->error_.c_str());
+        return;
+    }
+
+    if (options->Has(Local<String>(New<String>("conform").ToLocalChecked()))) {
+        ASSERT_GET_STRING_OPT(options, opt, "conform", conform);
+
+        if (!std::string(*conform).empty()) {
+            ASSERT_GET_BUFFER_OPT(options, opt, "conform_contents", conform_contents);
+            ASSERT_GET_UINT32_OPT(options, opt, "conform_length", conform_length);
+            ASSERT_GET_STRING_ARRAY_OPT(options, opt, "conform_include_directories", conform_include_directories);
+
+            flatbuffers::Parser conform_parser;
+            conform_parser.SetSize(true, conform_length);
+            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_include_directories);
+            auto err = parser->ConformTo(conform_parser);
+            if (!err.empty()) {
+                std::stringstream errss;
+                errss << "schemas don\'t conform: " << err;
+                ThrowTypeError(errss.str().c_str());
+                return;
+            }
+        }
+    }
+
+    std::string code = flatbuffers::GenerateJSCode(*parser.get());
+    info.GetReturnValue().Set(New<String>(code.c_str()).ToLocalChecked());
+}
+
 NAN_MODULE_INIT(Init) {
     Nan::Set(target,
         New<String>("binary").ToLocalChecked(),
         New<FunctionTemplate>(GenerateBinary)->GetFunction()
+    );
+
+    Nan::Set(target,
+        New<String>("js").ToLocalChecked(),
+        New<FunctionTemplate>(GenerateJs)->GetFunction()
     );
 }
 
