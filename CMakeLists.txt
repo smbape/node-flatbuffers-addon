@@ -49,7 +49,6 @@ set(FlatBuffers_Compiler_SRCS
 
 set(SOURCE_FILES
   ${FlatBuffers_Compiler_SRCS}
-  src/allocator.h
   src/index.cpp
 )
 

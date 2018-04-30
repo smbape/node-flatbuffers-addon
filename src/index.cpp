@@ -6,7 +6,6 @@
 
 #include "flatbuffers/flatbuffers.h"
 #include "flatbuffers/idl.h"
-#include "allocator.h"
 
 using namespace Nan;
 
@@ -171,11 +170,11 @@ static void GenerateBinary_(
 
     v8::Local<v8::Object> ret;
 
-    if (parser.builder_->GetSize() == 0) {
+    if (parser.builder_.GetSize() == 0) {
         ret = NewBuffer(0).ToLocalChecked();
     } else {
-        char *buffer = reinterpret_cast<char *>(parser.builder_->GetBufferPointer());
-        size_t len = parser.builder_->GetSize();
+        char *buffer = reinterpret_cast<char *>(parser.builder_.GetBufferPointer());
+        size_t len = parser.builder_.GetSize();
         ret = CopyBuffer(buffer, len).ToLocalChecked(); // Make v8 allocator handle gc when needed
     }
 
@@ -205,10 +204,7 @@ NAN_METHOD(GenerateBinary) {
     SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
     SET_BOOLEAN_OPT(options, opt, opts, "binary_schema_comments", binary_schema_comments);
 
-    flatbuffers::Allocator *allocator = &NODE_GYP_MODULE_NAME::DefaultAllocator::instance();
-    flatbuffers::FlatBufferBuilder builder_(1024, allocator, false, flatbuffers::AlignOf<flatbuffers::largest_scalar_t>());
-    std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(&builder_, opts));
-    // std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
+    std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
 
     ASSERT_GET_STRING_OPT(options, opt, "schema", schema);
     ASSERT_GET_BUFFER_OPT(options, opt, "schema_contents", schema_contents);
@@ -218,15 +214,15 @@ NAN_METHOD(GenerateBinary) {
 
     parser->SetSize(true, schema_length);
     if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, include_directories)) {
-        parser->builder_->Reset();
+        parser->builder_.Reset();
         ThrowTypeError(parser->error_.c_str());
         return;
     }
 
     flatbuffers::Parser conform_parser;
     GenerateBinary_(info, *parser.get(), conform_parser, include_directories, options);
-    parser->builder_->Reset();
-    conform_parser.builder_->Reset();
+    parser->builder_.Reset();
+    conform_parser.builder_.Reset();
 }
 
 static void GenerateJS_(
@@ -312,8 +308,8 @@ NAN_METHOD(GenerateJS) {
 
     flatbuffers::Parser conform_parser;
     GenerateJS_(info, *parser.get(), conform_parser, include_directories, options);
-    parser->builder_->Reset();
-    conform_parser.builder_->Reset();
+    parser->builder_.Reset();
+    conform_parser.builder_.Reset();
 }
 
 NAN_MODULE_INIT(Init) {

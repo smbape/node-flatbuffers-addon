@@ -43,7 +43,6 @@
       "deps/flatbuffers/grpc/src/compiler/go_generator.cc",
       "deps/flatbuffers/grpc/src/compiler/java_generator.h",
       "deps/flatbuffers/grpc/src/compiler/java_generator.cc",
-      "src/allocator.h",
       "src/index.cpp"
     ]
   }]
