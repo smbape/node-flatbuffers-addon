@@ -11,7 +11,7 @@ index d19002e..bd16439 100644
    static std::string NamespaceDir(const Parser &parser, const std::string &path,
                                    const Namespace &ns);
 diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
-index a811fcb..d9fc21c 100644
+index a811fcb..9b801da 100644
 --- a/include/flatbuffers/idl.h
 +++ b/include/flatbuffers/idl.h
 @@ -451,12 +451,15 @@ struct IDLOptions {
@@ -31,7 +31,27 @@ index a811fcb..d9fc21c 100644
  
    std::string attribute_;
    std::vector<std::string> doc_comment_;
-@@ -565,6 +568,9 @@ class Parser : public ParserState {
+@@ -510,14 +513,17 @@ class CheckedError {
+ 
+ class Parser : public ParserState {
+  public:
+-  explicit Parser(const IDLOptions &options = IDLOptions())
++  explicit Parser(FlatBufferBuilder *builder) : Parser(builder, IDLOptions()) {}
++  explicit Parser(const IDLOptions &options) : Parser(new FlatBufferBuilder(), options) {}
++  explicit Parser(FlatBufferBuilder *builder = new FlatBufferBuilder(), const IDLOptions &options = IDLOptions())
+       : current_namespace_(nullptr),
+         empty_namespace_(nullptr),
+         root_struct_def_(nullptr),
+         opts(options),
+         uses_flexbuffers_(false),
+         source_(nullptr),
+-        anonymous_counter(0) {
++        anonymous_counter(0),
++        builder_(builder) {
+     // Start out with the empty namespace being current.
+     empty_namespace_ = new Namespace();
+     namespaces_.push_back(empty_namespace_);
+@@ -565,6 +571,9 @@ class Parser : public ParserState {
    bool Parse(const char *_source, const char **include_paths = nullptr,
               const char *source_filename = nullptr);
  
@@ -41,7 +61,16 @@ index a811fcb..d9fc21c 100644
    // Set the root type. May override the one set in the schema.
    bool SetRootType(const char *name);
  
-@@ -762,6 +768,10 @@ extern bool GenerateCPP(const Parser &parser,
+@@ -706,7 +715,7 @@ class Parser : public ParserState {
+   Namespace *empty_namespace_;
+   std::string error_;         // User readable error_ if Parse() == false
+ 
+-  FlatBufferBuilder builder_;  // any data contained in the file
++  FlatBufferBuilder *builder_;  // any data contained in the file
+   StructDef *root_struct_def_;
+   std::string file_identifier_;
+   std::string file_extension_;
+@@ -762,6 +771,10 @@ extern bool GenerateCPP(const Parser &parser,
                          const std::string &path,
                          const std::string &file_name);
  
@@ -67,6 +96,73 @@ index c6bf91c..b9ee84e 100644
  std::string BaseGenerator::NamespaceDir(const Parser &parser,
                                          const std::string &path,
                                          const Namespace &ns) {
+diff --git a/src/flatc.cpp b/src/flatc.cpp
+index 8e4906f..80116ee 100644
+--- a/src/flatc.cpp
++++ b/src/flatc.cpp
+@@ -312,8 +312,8 @@ int FlatCompiler::Compile(int argc, const char **argv) {
+     auto ext = flatbuffers::GetExtension(filename);
+     auto is_schema = ext == "fbs" || ext == "proto";
+     if (is_binary) {
+-      parser->builder_.Clear();
+-      parser->builder_.PushFlatBuffer(
++      parser->builder_->Clear();
++      parser->builder_->PushFlatBuffer(
+           reinterpret_cast<const uint8_t *>(contents.c_str()),
+           contents.length());
+       if (!raw_binary) {
+@@ -347,7 +347,7 @@ int FlatCompiler::Compile(int argc, const char **argv) {
+         parser.reset(new flatbuffers::Parser(opts));
+       }
+       ParseFile(*parser.get(), filename, contents, include_directories);
+-      if (!is_schema && !parser->builder_.GetSize()) {
++      if (!is_schema && !parser->builder_->GetSize()) {
+         // If a file doesn't end in .fbs, it must be json/binary. Ensure we
+         // didn't just parse a schema with a different extension.
+         Error(
+diff --git a/src/idl_gen_cpp.cpp b/src/idl_gen_cpp.cpp
+index 7c041a2..ea9adb1 100644
+--- a/src/idl_gen_cpp.cpp
++++ b/src/idl_gen_cpp.cpp
+@@ -1931,11 +1931,11 @@ class CppGenerator : public BaseGenerator {
+         if (!field.deprecated && (!struct_def.sortbysize ||
+                                   size == SizeOf(field.value.type.base_type))) {
+           code_.SetValue("FIELD_NAME", Name(field));
+-          code_ += "  builder_.add_{{FIELD_NAME}}({{FIELD_NAME}});";
++          code_ += "  builder_->add_{{FIELD_NAME}}({{FIELD_NAME}});";
+         }
+       }
+     }
+-    code_ += "  return builder_.Finish();";
++    code_ += "  return builder_->Finish();";
+     code_ += "}";
+     code_ += "";
+ 
+diff --git a/src/idl_gen_general.cpp b/src/idl_gen_general.cpp
+index 358169b..99e72e0 100644
+--- a/src/idl_gen_general.cpp
++++ b/src/idl_gen_general.cpp
+@@ -1466,16 +1466,16 @@ std::string BinaryFileName(const Parser &parser, const std::string &path,
+ 
+ bool GenerateBinary(const Parser &parser, const std::string &path,
+                     const std::string &file_name) {
+-  return !parser.builder_.GetSize() ||
++  return !parser.builder_->GetSize() ||
+          flatbuffers::SaveFile(
+              BinaryFileName(parser, path, file_name).c_str(),
+-             reinterpret_cast<char *>(parser.builder_.GetBufferPointer()),
+-             parser.builder_.GetSize(), true);
++             reinterpret_cast<char *>(parser.builder_->GetBufferPointer()),
++             parser.builder_->GetSize(), true);
+ }
+ 
+ std::string BinaryMakeRule(const Parser &parser, const std::string &path,
+                            const std::string &file_name) {
+-  if (!parser.builder_.GetSize()) return "";
++  if (!parser.builder_->GetSize()) return "";
+   std::string filebase =
+       flatbuffers::StripPath(flatbuffers::StripExtension(file_name));
+   std::string make_rule =
 diff --git a/src/idl_gen_js.cpp b/src/idl_gen_js.cpp
 index c0844d4..c8a45cd 100644
 --- a/src/idl_gen_js.cpp
@@ -104,8 +200,33 @@ index c0844d4..c8a45cd 100644
  bool GenerateJS(const Parser &parser, const std::string &path,
                  const std::string &file_name) {
    js::JsGenerator generator(parser, path, file_name);
+diff --git a/src/idl_gen_text.cpp b/src/idl_gen_text.cpp
+index 6ef7f09..a37c068 100644
+--- a/src/idl_gen_text.cpp
++++ b/src/idl_gen_text.cpp
+@@ -279,9 +279,9 @@ std::string TextFileName(const std::string &path,
+ 
+ bool GenerateTextFile(const Parser &parser, const std::string &path,
+                       const std::string &file_name) {
+-  if (!parser.builder_.GetSize() || !parser.root_struct_def_) return true;
++  if (!parser.builder_->GetSize() || !parser.root_struct_def_) return true;
+   std::string text;
+-  if (!GenerateText(parser, parser.builder_.GetBufferPointer(), &text)) {
++  if (!GenerateText(parser, parser.builder_->GetBufferPointer(), &text)) {
+     return false;
+   }
+   return flatbuffers::SaveFile(TextFileName(path, file_name).c_str(), text,
+@@ -290,7 +290,7 @@ bool GenerateTextFile(const Parser &parser, const std::string &path,
+ 
+ std::string TextMakeRule(const Parser &parser, const std::string &path,
+                          const std::string &file_name) {
+-  if (!parser.builder_.GetSize() || !parser.root_struct_def_) return "";
++  if (!parser.builder_->GetSize() || !parser.root_struct_def_) return "";
+   std::string filebase =
+       flatbuffers::StripPath(flatbuffers::StripExtension(file_name));
+   std::string make_rule = TextFileName(path, filebase) + ": " + file_name;
 diff --git a/src/idl_parser.cpp b/src/idl_parser.cpp
-index b16e3e1..567ce41 100644
+index b16e3e1..882ad89 100644
 --- a/src/idl_parser.cpp
 +++ b/src/idl_parser.cpp
 @@ -262,6 +262,10 @@ CheckedError Parser::Next() {
@@ -119,6 +240,160 @@ index b16e3e1..567ce41 100644
      char c = *cursor_++;
      token_ = c;
      switch (c) {
+@@ -813,7 +817,7 @@ CheckedError Parser::ParseField(StructDef &struct_def) {
+ CheckedError Parser::ParseString(Value &val) {
+   auto s = attribute_;
+   EXPECT(kTokenStringConstant);
+-  val.constant = NumToString(builder_.CreateString(s).o);
++  val.constant = NumToString(builder_->CreateString(s).o);
+   return NoError();
+ }
+ 
+@@ -877,8 +881,8 @@ CheckedError Parser::ParseAnyValue(Value &val, FieldDef *field,
+         if (enum_val->union_type.struct_def->fixed) {
+           // All BASE_TYPE_UNION values are offsets, so turn this into one.
+           SerializeStruct(*enum_val->union_type.struct_def, val);
+-          builder_.ClearOffsets();
+-          val.constant = NumToString(builder_.GetSize());
++          builder_->ClearOffsets();
++          val.constant = NumToString(builder_->GetSize());
+         }
+       } else if (enum_val->union_type.base_type == BASE_TYPE_STRING) {
+         ECHECK(ParseString(val));
+@@ -919,10 +923,10 @@ CheckedError Parser::ParseAnyValue(Value &val, FieldDef *field,
+ 
+ void Parser::SerializeStruct(const StructDef &struct_def, const Value &val) {
+   assert(val.constant.length() == struct_def.bytesize);
+-  builder_.Align(struct_def.minalign);
+-  builder_.PushBytes(reinterpret_cast<const uint8_t *>(val.constant.c_str()),
++  builder_->Align(struct_def.minalign);
++  builder_->PushBytes(reinterpret_cast<const uint8_t *>(val.constant.c_str()),
+                      struct_def.bytesize);
+-  builder_.AddStructOffset(val.offset, builder_.GetSize());
++  builder_->AddStructOffset(val.offset, builder_->GetSize());
+ }
+ 
+ CheckedError Parser::ParseTableDelimiters(size_t &fieldn,
+@@ -996,7 +1000,7 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+                                            flexbuffers::BUILDER_FLAG_SHARE_ALL);
+               ECHECK(parser->ParseFlexBufferValue(&builder));
+               builder.Finish();
+-              auto off = parser->builder_.CreateVector(builder.GetBuffer());
++              auto off = parser->builder_->CreateVector(builder.GetBuffer());
+               val.constant = NumToString(off.o);
+             } else if (field->nested_flatbuffer) {
+               ECHECK(parser->ParseNestedFlatbuffer(val, field, fieldn,
+@@ -1051,8 +1055,8 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+   if (struct_def.fixed && fieldn_outer != struct_def.fields.vec.size())
+     return Error("struct: wrong number of initializers: " + struct_def.name);
+ 
+-  auto start = struct_def.fixed ? builder_.StartStruct(struct_def.minalign)
+-                                : builder_.StartTable();
++  auto start = struct_def.fixed ? builder_->StartStruct(struct_def.minalign)
++                                : builder_->StartTable();
+ 
+   for (size_t size = struct_def.sortbysize ? sizeof(largest_scalar_t) : 1; size;
+        size /= 2) {
+@@ -1068,16 +1072,16 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+           #define FLATBUFFERS_TD(ENUM, IDLTYPE, \
+             CTYPE, JTYPE, GTYPE, NTYPE, PTYPE) \
+             case BASE_TYPE_ ## ENUM: \
+-              builder_.Pad(field->padding); \
++              builder_->Pad(field->padding); \
+               if (struct_def.fixed) { \
+                 CTYPE val; \
+                 ECHECK(atot(field_value.constant.c_str(), *this, &val)); \
+-                builder_.PushElement(val); \
++                builder_->PushElement(val); \
+               } else { \
+                 CTYPE val, valdef; \
+                 ECHECK(atot(field_value.constant.c_str(), *this, &val)); \
+                 ECHECK(atot(field->value.constant.c_str(), *this, &valdef)); \
+-                builder_.AddElement(field_value.offset, val, valdef); \
++                builder_->AddElement(field_value.offset, val, valdef); \
+               } \
+               break;
+             FLATBUFFERS_GEN_TYPES_SCALAR(FLATBUFFERS_TD);
+@@ -1085,13 +1089,13 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+           #define FLATBUFFERS_TD(ENUM, IDLTYPE, \
+             CTYPE, JTYPE, GTYPE, NTYPE, PTYPE) \
+             case BASE_TYPE_ ## ENUM: \
+-              builder_.Pad(field->padding); \
++              builder_->Pad(field->padding); \
+               if (IsStruct(field->value.type)) { \
+                 SerializeStruct(*field->value.type.struct_def, field_value); \
+               } else { \
+                 CTYPE val; \
+                 ECHECK(atot(field_value.constant.c_str(), *this, &val)); \
+-                builder_.AddOffset(field_value.offset, val); \
++                builder_->AddOffset(field_value.offset, val); \
+               } \
+               break;
+             FLATBUFFERS_GEN_TYPES_POINTER(FLATBUFFERS_TD);
+@@ -1104,18 +1108,18 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+   for (size_t i = 0; i < fieldn_outer; i++) field_stack_.pop_back();
+ 
+   if (struct_def.fixed) {
+-    builder_.ClearOffsets();
+-    builder_.EndStruct();
++    builder_->ClearOffsets();
++    builder_->EndStruct();
+     assert(value);
+     // Temporarily store this struct in the value string, since it is to
+     // be serialized in-place elsewhere.
+     value->assign(
+-        reinterpret_cast<const char *>(builder_.GetCurrentBufferPointer()),
++        reinterpret_cast<const char *>(builder_->GetCurrentBufferPointer()),
+         struct_def.bytesize);
+-    builder_.PopBytes(struct_def.bytesize);
++    builder_->PopBytes(struct_def.bytesize);
+     assert(!ovalue);
+   } else {
+-    auto val = builder_.EndTable(start);
++    auto val = builder_->EndTable(start);
+     if (ovalue) *ovalue = val;
+     if (value) *value = NumToString(val);
+   }
+@@ -1155,7 +1159,7 @@ CheckedError Parser::ParseVector(const Type &type, uoffset_t *ovalue) {
+       &parser_and_type_state);
+   ECHECK(err);
+ 
+-  builder_.StartVector(count * InlineSize(type) / InlineAlignment(type),
++  builder_->StartVector(count * InlineSize(type) / InlineAlignment(type),
+                        InlineAlignment(type));
+   for (size_t i = 0; i < count; i++) {
+     // start at the back, since we're building the data backwards.
+@@ -1169,7 +1173,7 @@ CheckedError Parser::ParseVector(const Type &type, uoffset_t *ovalue) {
+           else { \
+              CTYPE elem; \
+              ECHECK(atot(val.constant.c_str(), *this, &elem)); \
+-             builder_.PushElement(elem); \
++             builder_->PushElement(elem); \
+           } \
+           break;
+         FLATBUFFERS_GEN_TYPES(FLATBUFFERS_TD)
+@@ -1179,8 +1183,8 @@ CheckedError Parser::ParseVector(const Type &type, uoffset_t *ovalue) {
+     field_stack_.pop_back();
+   }
+ 
+-  builder_.ClearOffsets();
+-  *ovalue = builder_.EndVector(count);
++  builder_->ClearOffsets();
++  *ovalue = builder_->EndVector(count);
+   return NoError();
+ }
+ 
+@@ -1206,8 +1210,8 @@ CheckedError Parser::ParseNestedFlatbuffer(Value &val, FieldDef *field,
+     if (!nested_parser.Parse(substring.c_str(), nullptr, nullptr)) {
+       ECHECK(Error(nested_parser.error_));
+     }
+-    auto off = builder_.CreateVector(nested_parser.builder_.GetBufferPointer(),
+-                                     nested_parser.builder_.GetSize());
++    auto off = builder_->CreateVector(nested_parser.builder_->GetBufferPointer(),
++                                     nested_parser.builder_->GetSize());
+     val.constant = NumToString(off.o);
+ 
+     // Clean nested_parser before destruction to avoid deleting the elements in
 @@ -1748,6 +1752,11 @@ CheckedError Parser::ParseService() {
    return NoError();
  }
@@ -141,6 +416,15 @@ index b16e3e1..567ce41 100644
    error_.clear();
    ECHECK(SkipByteOrderMark());
    NEXT();
+@@ -2336,7 +2348,7 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
+     include_paths = current_directory;
+   }
+   field_stack_.clear();
+-  builder_.Clear();
++  builder_->Clear();
+   // Start with a blank namespace just in case this file doesn't have one.
+   current_namespace_ = empty_namespace_;
+ 
 @@ -2374,6 +2386,8 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
          std::string contents;
          if (!LoadFile(filepath.c_str(), true, &contents))
@@ -158,3 +442,65 @@ index b16e3e1..567ce41 100644
          // This is the easiest way to continue this file after an include:
          // instead of saving and restoring all the state, we simply start the
          // file anew. This will cause it to encounter the same include
+@@ -2407,17 +2422,17 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
+     } else if (token_ == '{') {
+       if (!root_struct_def_)
+         return Error("no root type set to parse json with");
+-      if (builder_.GetSize()) {
++      if (builder_->GetSize()) {
+         return Error("cannot have more than one json object in a file");
+       }
+       uoffset_t toff;
+       ECHECK(ParseTable(*root_struct_def_, nullptr, &toff));
+       if (opts.size_prefixed) {
+-        builder_.FinishSizePrefixed(Offset<Table>(toff), file_identifier_.length()
++        builder_->FinishSizePrefixed(Offset<Table>(toff), file_identifier_.length()
+                                                              ? file_identifier_.c_str()
+                                                              : nullptr);
+       } else {
+-        builder_.Finish(Offset<Table>(toff), file_identifier_.length()
++        builder_->Finish(Offset<Table>(toff), file_identifier_.length()
+                                                  ? file_identifier_.c_str()
+                                                  : nullptr);
+       }
+@@ -2506,31 +2521,31 @@ template<typename T> void AssignIndices(const std::vector<T *> &defvec) {
+ }
+ 
+ void Parser::Serialize() {
+-  builder_.Clear();
++  builder_->Clear();
+   AssignIndices(structs_.vec);
+   AssignIndices(enums_.vec);
+   std::vector<Offset<reflection::Object>> object_offsets;
+   for (auto it = structs_.vec.begin(); it != structs_.vec.end(); ++it) {
+-    auto offset = (*it)->Serialize(&builder_, *this);
++    auto offset = (*it)->Serialize(builder_, *this);
+     object_offsets.push_back(offset);
+     (*it)->serialized_location = offset.o;
+   }
+   std::vector<Offset<reflection::Enum>> enum_offsets;
+   for (auto it = enums_.vec.begin(); it != enums_.vec.end(); ++it) {
+-    auto offset = (*it)->Serialize(&builder_, *this);
++    auto offset = (*it)->Serialize(builder_, *this);
+     enum_offsets.push_back(offset);
+     (*it)->serialized_location = offset.o;
+   }
+   auto schema_offset = reflection::CreateSchema(
+-      builder_, builder_.CreateVectorOfSortedTables(&object_offsets),
+-      builder_.CreateVectorOfSortedTables(&enum_offsets),
+-      builder_.CreateString(file_identifier_),
+-      builder_.CreateString(file_extension_),
++      *builder_, builder_->CreateVectorOfSortedTables(&object_offsets),
++      builder_->CreateVectorOfSortedTables(&enum_offsets),
++      builder_->CreateString(file_identifier_),
++      builder_->CreateString(file_extension_),
+       root_struct_def_ ? root_struct_def_->serialized_location : 0);
+   if (opts.size_prefixed) {
+-    builder_.FinishSizePrefixed(schema_offset, reflection::SchemaIdentifier());
++    builder_->FinishSizePrefixed(schema_offset, reflection::SchemaIdentifier());
+   } else {
+-    builder_.Finish(schema_offset, reflection::SchemaIdentifier());
++    builder_->Finish(schema_offset, reflection::SchemaIdentifier());
+   }
+ }
+ 

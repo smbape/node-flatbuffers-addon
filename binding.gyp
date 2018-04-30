@@ -2,7 +2,7 @@
   "targets": [{
     "target_name": "addon",
     "include_dirs" : [
-      # "src",
+      "src",
       "deps/flatbuffers/include",
       "deps/flatbuffers/grpc",
       "<!(node -e \"require('nan')\")"
@@ -43,6 +43,7 @@
       "deps/flatbuffers/grpc/src/compiler/go_generator.cc",
       "deps/flatbuffers/grpc/src/compiler/java_generator.h",
       "deps/flatbuffers/grpc/src/compiler/java_generator.cc",
+      "src/allocator.h",
       "src/index.cpp"
     ]
   }]

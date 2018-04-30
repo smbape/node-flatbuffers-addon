@@ -49,6 +49,7 @@ set(FlatBuffers_Compiler_SRCS
 
 set(SOURCE_FILES
   ${FlatBuffers_Compiler_SRCS}
+  src/allocator.h
   src/index.cpp
 )
 
@@ -110,6 +111,7 @@ elseif(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /WX /wd4512 /wd4316 /wd4100 /wd4251 /wd4267")
 endif()
 
+include_directories(src)
 include_directories(deps/flatbuffers/include)
 include_directories(deps/flatbuffers/grpc)
 
