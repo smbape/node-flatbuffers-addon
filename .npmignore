@@ -2,4 +2,7 @@
 /deps/flatbuffers
 /node_modules
 /tests
+/CMakeLists.txt
+/package-lock.json
+/project.sublime-project
 /project.sublime-workspace
