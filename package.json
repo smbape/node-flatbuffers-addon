@@ -10,8 +10,8 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "node node_modules/mocha/bin/_mocha --full-trace --require tests/common.js \"tests/*-test.js\"",
-    "prepack": "npm run test",
+    "test": "_mocha --full-trace --require tests/common.js \"tests/*-test.js\"",
+    "prepublishOnly": "npm run test",
     "download-prerequisites": "node scripts/download-prerequisites.js",
     "build": "node-gyp build",
     "install": "npm run download-prerequisites && node-gyp rebuild"
