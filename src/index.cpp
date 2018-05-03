@@ -229,7 +229,6 @@ static void GenerateJS_(
     NAN_METHOD_ARGS_TYPE &info, 
     flatbuffers::Parser &parser,
     flatbuffers::Parser &conform_parser, 
-    std::vector<const char *> &include_directories,
     v8::Local<v8::Object> &options
 ) {
     v8::Local<v8::String> opt;
@@ -307,7 +306,7 @@ NAN_METHOD(GenerateJS) {
     }
 
     flatbuffers::Parser conform_parser;
-    GenerateJS_(info, *parser.get(), conform_parser, include_directories, options);
+    GenerateJS_(info, *parser.get(), conform_parser, options);
     parser->builder_.Reset();
     conform_parser.builder_.Reset();
 }
