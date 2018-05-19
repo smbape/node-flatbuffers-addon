@@ -1,5 +1,5 @@
 /build
-/deps/flatbuffers
+/deps
 /node_modules
 /tests
 /CMakeLists.txt
