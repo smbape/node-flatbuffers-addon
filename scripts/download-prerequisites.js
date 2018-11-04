@@ -97,7 +97,7 @@ const applyPatch = (dmp, file, cwd, patch, done) => {
         const [patched, [applied]] = result;
 
         if (!applied) {
-            // done(new Error(`Error while patching '${ file }}'`));
+            // console.log(`Error while patching '${ file }'`);
             done();
             return;
         }
@@ -141,7 +141,7 @@ const patchFromBuffer = (dmp, tokenizer, q, cwd, patchfile, options, buffer, len
                 lastEnd = end + 1;
                 q.push({
                     fn: applyPatch,
-                    args: [dmp, file, cwd, buffer.slice(start, end).toString()]
+                    args: [dmp, file, cwd, buffer.slice(start, end).toString().replace(/%/g, "%25")]
                 });
                 start = undefined;
                 end = undefined;
@@ -180,7 +180,7 @@ const patchFromBuffer = (dmp, tokenizer, q, cwd, patchfile, options, buffer, len
         if (start) {
             q.push({
                 fn: applyPatch,
-                args: [dmp, file, cwd, buffer.slice(start, end).toString()]
+                args: [dmp, file, cwd, buffer.slice(start, end).toString().replace(/%/g, "%25")]
             });
         }
     } else if (lastEnd) {
@@ -215,7 +215,7 @@ const patch = (dmp, tokenizer, q, cwd, patchfile, options, done) => {
     });
 };
 
-const version = "1.9.0";
+const version = "1.10.0";
 const cwd = sysPath.resolve(__dirname, "../deps/flatbuffers");
 
 const dmp = new diff_match_patch();
@@ -246,7 +246,7 @@ waterfall([
 
     (performed, next) => {
         if (!performed) {
-            next()
+            next(null, performed)
             return;
         }
 
@@ -264,7 +264,7 @@ waterfall([
             return;
         }
 
-        patch(dmp, tokenizer, q, cwd, sysPath.resolve(__dirname, "../patches/flatbuffers-1.9.x-add_buffer_parsing.patch"), {
+        patch(dmp, tokenizer, q, cwd, sysPath.resolve(__dirname, "../patches/flatbuffers-1.10.x-add_buffer_parsing.patch"), {
             strip: 1
         }, next);
     }

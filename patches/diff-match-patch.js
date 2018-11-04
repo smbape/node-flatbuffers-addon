@@ -53,7 +53,7 @@ diff_match_patch.prototype.patch_fromText = function(textline) {
                 line = decodeURI(text[textPointer].slice(1));
             } catch ( ex ) {
                 // Malformed URI sequence.
-                throw new Error(`Illegal escape in patch_fromText: ${ line }`);
+                throw new Error(`Illegal escape in patch_fromText: ${ line } '${ text[textPointer].slice(1) }'`);
             }
             if (sign === "-") {
                 // Deletion.
