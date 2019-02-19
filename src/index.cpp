@@ -51,7 +51,7 @@ namespace NODE_GYP_MODULE_NAME {
         ThrowTypeError(name " option must be a positive integer");\
         return;                                                 \
     }                                                           \
-    unsigned int identifier = value->Uint32Value()
+    unsigned int identifier = value->ToUint32(Nan::GetCurrentContext()).ToLocalChecked()->Value()
 
 #define ASSERT_GET_STRING_ARRAY_OPT(options, opt, name, identifier)\
     opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
@@ -92,7 +92,7 @@ namespace NODE_GYP_MODULE_NAME {
         ThrowTypeError(name " option must be a boolean");       \
         return;                                                 \
     }                                                           \
-    bool identifier = value->BooleanValue()
+    bool identifier = value->ToBoolean(Nan::GetCurrentContext()).ToLocalChecked()->Value()
 
 #define SET_BOOLEAN_OPT(options, opt, opts, name, identifier)   \
     opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
