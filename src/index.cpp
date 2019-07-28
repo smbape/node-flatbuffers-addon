@@ -253,7 +253,7 @@ static void GenerateJS_(
         }
     }
 
-    std::string code = flatbuffers::GenerateJSCode(parser);
+    std::string code = flatbuffers::GenerateJSTSCode(parser);
     info.GetReturnValue().Set(New<v8::String>(code.c_str()).ToLocalChecked());
 }
 

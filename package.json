@@ -22,19 +22,19 @@
   "author": "Stéphane MBAPE <smbape@yahoo.fr>",
   "license": "MIT",
   "dependencies": {
-    "async": "^2.6.2",
-    "bindings": "^1.4.0",
+    "async": "^3.1.0",
+    "bindings": "^1.5.0",
     "diff-match-patch": "^1.0.4",
     "mkdirp": "^0.5.1",
-    "nan": "^2.12.1",
-    "node-gyp": "^3.8.0",
+    "nan": "^2.14.0",
+    "node-gyp": "^5.0.3",
     "request": "^2.88.0",
-    "tar": "^4.4.8"
+    "tar": "^4.4.10"
   },
   "devDependencies": {
     "chai": "^4.2.0",
-    "flatbuffers": "^1.10.2",
-    "mocha": "^6.0.0",
+    "flatbuffers": "^1.11.0",
+    "mocha": "^6.2.0",
     "rimraf": "^2.6.3"
   }
 }

@@ -28,7 +28,7 @@
       # "deps/flatbuffers/src/idl_gen_cpp.cpp",
       # "deps/flatbuffers/src/idl_gen_general.cpp",
       # "deps/flatbuffers/src/idl_gen_go.cpp",
-      "deps/flatbuffers/src/idl_gen_js.cpp",
+      "deps/flatbuffers/src/idl_gen_js_ts.cpp",
       # "deps/flatbuffers/src/idl_gen_php.cpp",
       # "deps/flatbuffers/src/idl_gen_python.cpp",
       # "deps/flatbuffers/src/idl_gen_fbs.cpp",

@@ -3,6 +3,7 @@
 const fs = require("fs");
 const sysPath = require("path");
 
+const eachOfLimit = require("async/eachOfLimit");
 const queue = require("async/queue");
 const waterfall = require("async/waterfall");
 
@@ -215,7 +216,7 @@ const patch = (dmp, tokenizer, q, cwd, patchfile, options, done) => {
     });
 };
 
-const version = "1.10.0";
+const version = "1.11.0";
 const cwd = sysPath.resolve(__dirname, "../deps/flatbuffers");
 
 const dmp = new diff_match_patch();
@@ -237,9 +238,9 @@ const q = queue((task, next) => {
     fn(...args.concat([next]));
 });
 
-q.error = (err, task) => {
+q.error((err, task) => {
     throw err;
-};
+});
 
 waterfall([
     mkdirp.bind(mkdirp, cwd),
@@ -264,8 +265,13 @@ waterfall([
             return;
         }
 
-        patch(dmp, tokenizer, q, cwd, sysPath.resolve(__dirname, "../patches/flatbuffers-1.10.x-add_buffer_parsing.patch"), {
-            strip: 1
+        eachOfLimit([
+            sysPath.resolve(__dirname, "../patches/fix-numeric_limits-to-avoid-conflict-with-windows.h-header.patch"),
+            sysPath.resolve(__dirname, "../patches/flatbuffers-1.11.x-add_buffer_parsing.patch"),
+        ], 1, (file, i, next) => {
+            patch(dmp, tokenizer, q, cwd, file, {
+                strip: 1
+            }, next);
         }, next);
     }
 ], err => {
