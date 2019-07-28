@@ -11,28 +11,36 @@ using namespace Nan;
 
 namespace NODE_GYP_MODULE_NAME {
 
+#define INIT_OPT_VARIABLES \
+    v8::Local<v8::String> opt;\
+    v8::Local<v8::Value> value;\
+    v8::Local<v8::Array> array;\
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();\
+    v8::EscapableHandleScope scope(isolate);\
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
 #define ASSERT_GET_STRING_OPT(options, opt, name, identifier)   \
-    opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
-    if (!options->Has(opt)) {                                   \
+    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
+    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
         ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
-    value = options->Get(opt);                                  \
+    value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsString()) {                                   \
         ThrowTypeError(name " option must be a string");        \
         return;                                                 \
     }                                                           \
-    v8::String::Utf8Value identifier(value)
+    Nan::Utf8String identifier(value)
 
 #define ASSERT_GET_BUFFER_OPT(options, opt, name, identifier)   \
-    opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
-    if (!options->Has(opt)) {                                   \
+    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
+    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
         ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
-    value = options->Get(opt);                                  \
+    value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsObject()) {                                   \
         ThrowTypeError(name " option must be a buffer");        \
         return;                                                 \
@@ -40,27 +48,27 @@ namespace NODE_GYP_MODULE_NAME {
     char* identifier = (char*) node::Buffer::Data(value)
 
 #define ASSERT_GET_UINT32_OPT(options, opt, name, identifier)   \
-    opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
-    if (!options->Has(opt)) {                                   \
+    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
+    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
         ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
-    value = options->Get(opt);                                  \
+    value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsUint32()) {                                   \
         ThrowTypeError(name " option must be a positive integer");\
         return;                                                 \
     }                                                           \
-    unsigned int identifier = value->ToUint32(Nan::GetCurrentContext()).ToLocalChecked()->Value()
+    unsigned int identifier = value->ToUint32(context).ToLocalChecked()->Value()
 
 #define ASSERT_GET_STRING_ARRAY_OPT(options, opt, name, identifier)\
-    opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
-    if (!options->Has(opt)) {                                   \
+    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
+    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
         ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
-    value = options->Get(opt);                                  \
+    value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsArray()) {                                    \
         ThrowTypeError(name " option must be an array");        \
         return;                                                 \
@@ -69,34 +77,34 @@ namespace NODE_GYP_MODULE_NAME {
                                                                 \
     std::vector<const char *> identifier;                       \
     for (unsigned int i = 0, len = array->Length(); i < len; i++) { \
-        value = array->Get(i);                                  \
+        value = scope.Escape(array->Get(context, i).FromMaybe(v8::Local<v8::Value>())); \
         if (!value->IsString()) {                               \
             std::stringstream err;                              \
             err << "element " << (i + 1) << " of " << name << " must be a string"; \
             ThrowTypeError(err.str().c_str());                  \
             return;                                             \
         }                                                       \
-        v8::String::Utf8Value utf8str(value);                       \
+        Nan::Utf8String utf8str(value);                         \
         identifier.push_back(std::string(*utf8str).c_str());    \
     }
 
 #define ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier)  \
-    opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
-    if (!options->Has(opt)) {                                   \
+    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
+    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
         ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
-    value = options->Get(opt);                                  \
+    value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsBoolean()) {                                  \
         ThrowTypeError(name " option must be a boolean");       \
         return;                                                 \
     }                                                           \
-    bool identifier = value->ToBoolean(Nan::GetCurrentContext()).ToLocalChecked()->Value()
+    bool identifier = value->ToBoolean(context).ToLocalChecked()->Value()
 
 #define SET_BOOLEAN_OPT(options, opt, opts, name, identifier)   \
-    opt = v8::Local<v8::String>(New<v8::String>(name).ToLocalChecked());    \
-    if (options->Has(opt)) {                                    \
+    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
+    if (Nan::HasOwnProperty(options, opt).FromJust()) {                                    \
         ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier); \
         opts.identifier = identifier;                           \
     }
@@ -114,19 +122,16 @@ static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename, 
 }
 
 static void GenerateBinary_(
-    NAN_METHOD_ARGS_TYPE &info, 
+    NAN_METHOD_ARGS_TYPE &info,
     flatbuffers::Parser &parser,
-    flatbuffers::Parser &conform_parser, 
+    flatbuffers::Parser &conform_parser,
     std::vector<const char *> &include_directories,
     v8::Local<v8::Object> &options
 ) {
+    INIT_OPT_VARIABLES
     bool schema_binary = false;
 
-    v8::Local<v8::String> opt;
-    v8::Local<v8::Value> value;
-    v8::Local<v8::Array> array;
-
-    if (options->Has(v8::Local<v8::String>(New<v8::String>("conform").ToLocalChecked()))) {
+    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("conform").ToLocalChecked())).FromJust()) {
         ASSERT_GET_STRING_OPT(options, opt, "conform", conform);
 
         if (!std::string(*conform).empty()) {
@@ -146,7 +151,7 @@ static void GenerateBinary_(
         }
     }
 
-    if (options->Has(v8::Local<v8::String>(New<v8::String>("schema_binary").ToLocalChecked()))) {
+    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("schema_binary").ToLocalChecked())).FromJust()) {
         ASSERT_GET_BOOLEAN_OPT(options, opt, "schema_binary", schema_binary_);
         schema_binary = schema_binary_;
     }
@@ -169,7 +174,7 @@ static void GenerateBinary_(
     v8::Local<v8::Object> ret;
 
     if (parser.builder_.GetSize() == 0) {
-        ret = NewBuffer(0).ToLocalChecked();
+        ret = Nan::NewBuffer(0).ToLocalChecked();
     } else {
         char *buffer = reinterpret_cast<char *>(parser.builder_.GetBufferPointer());
         size_t len = parser.builder_.GetSize();
@@ -180,21 +185,16 @@ static void GenerateBinary_(
 }
 
 NAN_METHOD(GenerateBinary) {
-    HandleScope scope;
-
     if (!info[0]->IsObject()) {
         ThrowTypeError("First argument should be an v8::Object.");
         return;
     }
 
+    INIT_OPT_VARIABLES
     flatbuffers::IDLOptions opts;
     opts.lang = flatbuffers::IDLOptions::kBinary;
 
     v8::Local<v8::Object> options = To<v8::Object>(info[0]).ToLocalChecked();
-
-    v8::Local<v8::String> opt;
-    v8::Local<v8::Value> value;
-    v8::Local<v8::Array> array;
 
     SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
     SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
@@ -224,16 +224,13 @@ NAN_METHOD(GenerateBinary) {
 }
 
 static void GenerateJS_(
-    NAN_METHOD_ARGS_TYPE &info, 
+    NAN_METHOD_ARGS_TYPE &info,
     flatbuffers::Parser &parser,
-    flatbuffers::Parser &conform_parser, 
+    flatbuffers::Parser &conform_parser,
     v8::Local<v8::Object> &options
 ) {
-    v8::Local<v8::String> opt;
-    v8::Local<v8::Value> value;
-    v8::Local<v8::Array> array;
-
-    if (options->Has(v8::Local<v8::String>(New<v8::String>("conform").ToLocalChecked()))) {
+    INIT_OPT_VARIABLES
+    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("conform").ToLocalChecked())).FromJust()) {
         ASSERT_GET_STRING_OPT(options, opt, "conform", conform);
 
         if (!std::string(*conform).empty()) {
@@ -254,27 +251,22 @@ static void GenerateJS_(
     }
 
     std::string code = flatbuffers::GenerateJSTSCode(parser);
-    info.GetReturnValue().Set(New<v8::String>(code.c_str()).ToLocalChecked());
+    info.GetReturnValue().Set(Nan::New(code.c_str()).ToLocalChecked());
 }
 
 NAN_METHOD(GenerateJS) {
-    HandleScope scope;
-
     if (!info[0]->IsObject()) {
         ThrowTypeError("First argument should be an v8::Object.");
         return;
     }
 
-    v8::Local<v8::Object> options = To<v8::Object>(info[0]).ToLocalChecked();
-    v8::Local<v8::String> opt;
-    v8::Local<v8::Value> value;
-    v8::Local<v8::Array> array;
-
+    INIT_OPT_VARIABLES
     flatbuffers::IDLOptions opts;
+    v8::Local<v8::Object> options = To<v8::Object>(info[0]).ToLocalChecked();
 
     opts.lang = flatbuffers::IDLOptions::kJs;
 
-    if (options->Has(v8::Local<v8::String>(New<v8::String>("type").ToLocalChecked()))) {
+    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("type").ToLocalChecked())).FromJust()) {
         ASSERT_GET_STRING_OPT(options, opt, "type", type);
         if (std::string(*type) == "ts") {
             opts.lang = flatbuffers::IDLOptions::kTs;
@@ -310,14 +302,16 @@ NAN_METHOD(GenerateJS) {
 }
 
 NAN_MODULE_INIT(Init) {
-    Set(target,
-        New<v8::String>("binary").ToLocalChecked(),
-        New<v8::FunctionTemplate>(GenerateBinary)->GetFunction()
+    v8::Local<v8::Context> context = Nan::GetCurrentContext();
+
+    Nan::Set(target,
+        Nan::New("binary").ToLocalChecked(),
+        Nan::New<v8::FunctionTemplate>(GenerateBinary)->GetFunction(context).ToLocalChecked()
     );
 
-    Set(target,
-        New<v8::String>("js").ToLocalChecked(),
-        New<v8::FunctionTemplate>(GenerateJS)->GetFunction()
+    Nan::Set(target,
+        Nan::New("js").ToLocalChecked(),
+        Nan::New<v8::FunctionTemplate>(GenerateJS)->GetFunction(context).ToLocalChecked()
     );
 }
 
