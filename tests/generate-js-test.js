@@ -1,3 +1,4 @@
+const { expect } = require("chai");
 const { flatbuffers } = require("flatbuffers");
 const addon = require("../");
 
@@ -75,8 +76,6 @@ const plainAccessor = nsp => {
             doPlainAccessor(proto, property);
         }
     }
-
-// eslint-disable-next-line no-invalid-this
 };
 
 const pick = (obj, props) => {
@@ -91,7 +90,7 @@ const pick = (obj, props) => {
     return ret;
 };
 
-describe("GenerateJS", function () {
+describe("generate-js", function () {
     it("should generate js", () => {
         const schema = "Library.fbs";
         const schema_contents = Buffer.from(`
@@ -105,6 +104,7 @@ describe("GenerateJS", function () {
                 authors:[string] (id: 2);
                 release:ulong (id: 3);
                 genres: [ulong] (id: 4);
+                rank:uint (id: 5);
             }
 
             table Library {
@@ -294,4 +294,78 @@ describe("GenerateJS", function () {
         expect(actual.name).to.equal(library.name);
         expect(actual.books).to.deep.equal(library.books);
     });
+
+    it("should ignore_null_scalar generate js", () => {
+        const schema_contents = Buffer.from(`
+            namespace some.nested.namespace;
+
+            file_extension "dat";
+
+            table Book {
+                id:string (id: 0);
+                title:string (id: 1);
+                authors:[string] (id: 2);
+                release:ulong (id: 3);
+                genres: [ulong] (id: 4);
+                rank: uint (id: 5);
+            }
+
+            table Library {
+                name:string (id: 0);
+                books: [Book] (id: 1);
+            }
+
+            root_type Library;
+        `);
+
+        const js = addon.js({
+            schema: schema_contents
+        });
+
+        const library = {
+            name: "BookShop 0",
+            books: []
+        };
+
+        for (let i = 0; i < 10; i++) {
+            library.books[i] = {
+                id: `book-${ i }`,
+                title: `Book ${ i }`,
+                authors: [`Author ${ i }`],
+                release: Math.floor(Date.now() / 1000),
+                genres: [ Math.floor(Math.random() * 1000) ],
+                rank: null
+            };
+        }
+
+        const json_contents = Buffer.from(JSON.stringify(library));
+
+        // Ignore null scalar
+        for (let i = 0; i < 10; i++) {
+            delete library.books[i].rank;
+        }
+
+        const binary = addon.binary({
+            schema: schema_contents,
+            json: json_contents,
+            ignore_null_scalar: true
+        });
+
+        const sandbox = {};
+        (new Function(js)).call(sandbox);
+        const nsp = sandbox.some.nested.namespace;
+        plainAccessor(nsp);
+
+        const bytes = new Uint8Array(binary);
+        const buf = new flatbuffers.ByteBuffer(bytes);
+        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
+
+        for (var i = 0, len = actual.books.length; i < len; i++) {
+            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
+        }
+
+        expect(actual.name).to.equal(library.name);
+        expect(actual.books).to.deep.equal(library.books);
+    });
+
 });

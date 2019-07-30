@@ -27,10 +27,6 @@ const schemaOptions = options => {
         options.schema_length = options.schema_contents.length;
     }
 
-    if (options.include_directories == null) {
-        options.include_directories = [];
-    }
-
     if (Buffer.isBuffer(options.conform) && options.conform_contents != null) {
         throw new TypeError("if conform option is a Buffer, conform_contents must be null or undefined");
     }
@@ -56,9 +52,19 @@ const schemaOptions = options => {
         options.conform_length = options.conform_contents.length;
     }
 
-    if (options.conform_include_directories == null) {
-        options.conform_include_directories = [];
-    }
+    [ "include_directories", "conform_include_directories" ].forEach(prop => {
+        if (options[prop] == null) {
+            options[prop] = [];
+        }
+
+        if (Array.isArray(options[prop])) {
+            options[prop].forEach((str, i, arr) => {
+                if (typeof str === "string") {
+                    arr[i] = Buffer.from(str);
+                }
+            });
+        }
+    });
 
     return options;
 }

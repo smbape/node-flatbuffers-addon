@@ -78,14 +78,13 @@ namespace NODE_GYP_MODULE_NAME {
     std::vector<const char *> identifier;                       \
     for (unsigned int i = 0, len = array->Length(); i < len; i++) { \
         value = scope.Escape(array->Get(context, i).FromMaybe(v8::Local<v8::Value>())); \
-        if (!value->IsString()) {                               \
+        if (!value->IsObject()) {                               \
             std::stringstream err;                              \
-            err << "element " << (i + 1) << " of " << name << " must be a string"; \
+            err << "element " << (i + 1) << " of " << name << " must be a buffer"; \
             ThrowTypeError(err.str().c_str());                  \
             return;                                             \
         }                                                       \
-        Nan::Utf8String utf8str(value);                         \
-        identifier.push_back(std::string(*utf8str).c_str());    \
+        identifier.push_back((char*) node::Buffer::Data(value));\
     }
 
 #define ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier)  \
@@ -197,10 +196,18 @@ NAN_METHOD(GenerateBinary) {
     v8::Local<v8::Object> options = To<v8::Object>(info[0]).ToLocalChecked();
 
     SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
+    SET_BOOLEAN_OPT(options, opt, opts, "ignore_null_scalar", ignore_null_scalar);
     SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
     SET_BOOLEAN_OPT(options, opt, opts, "skip_unexpected_fields_in_json", skip_unexpected_fields_in_json);
-    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
+    SET_BOOLEAN_OPT(options, opt, opts, "size_prefixed", size_prefixed);
+    SET_BOOLEAN_OPT(options, opt, opts, "proto_mode", proto_mode);
+    SET_BOOLEAN_OPT(options, opt, opts, "proto_oneof_union", proto_oneof_union);
     SET_BOOLEAN_OPT(options, opt, opts, "binary_schema_comments", binary_schema_comments);
+    SET_BOOLEAN_OPT(options, opt, opts, "binary_schema_builtins", binary_schema_builtins);
+    SET_BOOLEAN_OPT(options, opt, opts, "force_defaults", force_defaults);
+
+    // Not documented in flatbuffers
+    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
 
     std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
 
@@ -273,13 +280,31 @@ NAN_METHOD(GenerateJS) {
         }
     }
 
-    SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
     SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
-    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
+    SET_BOOLEAN_OPT(options, opt, opts, "mutable_buffer", mutable_buffer);
+    SET_BOOLEAN_OPT(options, opt, opts, "generate_all", generate_all);
     SET_BOOLEAN_OPT(options, opt, opts, "skip_js_exports", skip_js_exports);
     SET_BOOLEAN_OPT(options, opt, opts, "use_goog_js_export_format", use_goog_js_export_format);
+    SET_BOOLEAN_OPT(options, opt, opts, "use_ES6_js_export_format", use_ES6_js_export_format);
+    SET_BOOLEAN_OPT(options, opt, opts, "size_prefixed", size_prefixed);
+    SET_BOOLEAN_OPT(options, opt, opts, "proto_mode", proto_mode);
+    SET_BOOLEAN_OPT(options, opt, opts, "proto_oneof_union", proto_oneof_union);
+    SET_BOOLEAN_OPT(options, opt, opts, "keep_include_path", keep_include_path);
     SET_BOOLEAN_OPT(options, opt, opts, "skip_flatbuffers_import", skip_flatbuffers_import);
     SET_BOOLEAN_OPT(options, opt, opts, "reexport_ts_modules", reexport_ts_modules);
+    SET_BOOLEAN_OPT(options, opt, opts, "js_ts_short_names", js_ts_short_names);
+
+    opt = v8::Local<v8::String>(Nan::New("include_prefix").ToLocalChecked());
+    if (Nan::HasOwnProperty(options, opt).FromJust()) {
+        value = Nan::Get(options, opt).ToLocalChecked();
+        if (!value->IsObject()) {
+            ThrowTypeError("include_prefix" " option must be a buffer");
+            return;
+        }
+        opts.include_prefix = flatbuffers::ConCatPathFileName(flatbuffers::PosixPath((char*) node::Buffer::Data(value)), "");
+    }
+
+    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
 
     std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
 

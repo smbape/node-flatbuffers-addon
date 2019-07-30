@@ -79,6 +79,13 @@ Include directories for conform schemas
 
 field names must be / will be quoted, no trailing commas in tables/vectors.
 
+### options.ignore\_null_scalar
+
+`type: bool`
+`default: false`
+
+Allow scalar fields to be null
+
 ### options.allow\_non_utf8
 
 **NOT TESTED**
@@ -98,6 +105,33 @@ Pass non-UTF-8 input through parser
 Allow fields in JSON that are not defined in the schema.
 These fields will be discared when generating binaries.
 
+### options.size_prefixed
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Input binaries are size prefixed buffers.
+
+### options.proto_mode
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Input is a .proto, translate to .fbs.
+
+### options.proto_oneof\_union
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Translate .proto oneofs to flatbuffer unions.
+
 ### options.binary\_schema_comments
 
 **NOT TESTED**
@@ -107,20 +141,30 @@ These fields will be discared when generating binaries.
 
 Add doc comments to the binary schema files.
 
+### options.binary\_schema_builtins
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Add builtin attributes to the binary schema files.
+
+### options.force_defaults
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Emit default values in binary output from JSON.
+
 ## Generate js
 
 ```js
 const flatc = require("flatbuffers-addon");
 const code = flatc.js(options);
 ```
-
-### options.type
-
-**NOT TESTED**
-
-`type: String`
-
-`ts` to generate TypeScript code.
 
 ### options.schema
 
@@ -174,6 +218,40 @@ Conform schema contents.
 
 Include directories for conform schemas
 
+### options.type
+
+**NOT TESTED**
+
+`type: String`
+
+`ts` to generate TypeScript code.
+
+### options.allow\_non_utf8
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Pass non-UTF-8 input through parser
+
+### options.mutable_buffer
+
+`type: bool`
+`default: false`
+
+Generate accessors that can mutate buffers in-place.
+
+### options.generate_all
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Generate not just code for the current schema files, but for all files it includes as well.
+If the language uses a single file for output (by default the case for C++ and JS), all code will end up in this one file.
+
 ### options.skip\_js_exports
 
 **NOT TESTED**
@@ -192,6 +270,24 @@ Removes Node.js style export lines in JS.
 
 Uses goog.exports* for closure compiler exporting in JS.
 
+### options.use\_ES6\_js\_export_format
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Uses ECMAScript 6 export style lines in JS.
+
+### options.keep\_include_path
+
+**NOT TESTED**
+
+`type: bool`
+`default: false`
+
+Keep original prefix of schema include statement.
+
 ### options.skip\_flatbuffers_import
 
 **NOT TESTED**
@@ -209,6 +305,15 @@ Don't include flatbuffers import statement for TypeScript.
 `default: true`
 
 re-export imported dependencies for TypeScript
+
+### options.js\_ts\_short_names
+
+**NOT TESTED**
+
+`type: bool`
+`default: true`
+
+Use short function names for JS and TypeScript.
 
 ## Examples
 

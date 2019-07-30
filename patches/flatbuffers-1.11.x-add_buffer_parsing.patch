@@ -11,10 +11,26 @@ index c2ed707a..81cf7b4b 100644
    static std::string NamespaceDir(const Parser &parser, const std::string &path,
                                    const Namespace &ns);
 diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
-index 8299fe0c..8fb048b8 100644
+index 8299fe0c..76e636d2 100644
 --- a/include/flatbuffers/idl.h
 +++ b/include/flatbuffers/idl.h
-@@ -524,7 +524,10 @@ struct ParserState {
+@@ -398,6 +398,7 @@ struct ServiceDef : public Definition {
+ // Container of options that may apply to any of the source/text generators.
+ struct IDLOptions {
+   bool strict_json;
++  bool ignore_null_scalar;
+   bool skip_js_exports;
+   bool use_goog_js_export_format;
+   bool use_ES6_js_export_format;
+@@ -476,6 +477,7 @@ struct IDLOptions {
+ 
+   IDLOptions()
+       : strict_json(false),
++        ignore_null_scalar(false),
+         skip_js_exports(false),
+         use_goog_js_export_format(false),
+         use_ES6_js_export_format(false),
+@@ -524,7 +526,10 @@ struct ParserState {
          line_start_(nullptr),
          line_(0),
          token_(-1),
@@ -26,7 +42,7 @@ index 8299fe0c..8fb048b8 100644
  
   protected:
    void ResetState(const char *source) {
-@@ -547,6 +550,9 @@ struct ParserState {
+@@ -547,6 +552,9 @@ struct ParserState {
    const char *line_start_;
    int line_;  // the current line being parsed
    int token_;
@@ -36,7 +52,7 @@ index 8299fe0c..8fb048b8 100644
  
    // Flag: text in attribute_ is true ASCII string without escape
    // sequences. Only printable ASCII (without [\t\r\n]).
-@@ -666,6 +672,9 @@ class Parser : public ParserState {
+@@ -666,6 +674,9 @@ class Parser : public ParserState {
    bool Parse(const char *_source, const char **include_paths = nullptr,
               const char *source_filename = nullptr);
  
@@ -46,7 +62,7 @@ index 8299fe0c..8fb048b8 100644
    // Set the root type. May override the one set in the schema.
    bool SetRootType(const char *name);
  
-@@ -868,6 +877,10 @@ extern bool GenerateDart(const Parser &parser,
+@@ -868,6 +879,10 @@ extern bool GenerateDart(const Parser &parser,
                           const std::string &path,
                           const std::string &file_name);
  
@@ -87,8 +103,29 @@ index 3b10db7f..5bdb0ce5 100644
  std::string BaseGenerator::NamespaceDir(const Parser &parser,
                                          const std::string &path,
                                          const Namespace &ns) {
+diff --git a/src/flatc.cpp b/src/flatc.cpp
+index 78e4c5bf..40fd61c4 100644
+--- a/src/flatc.cpp
++++ b/src/flatc.cpp
+@@ -77,6 +77,7 @@ std::string FlatCompiler::GetUsageString(const char *program_name) const {
+     "  --version          Print the version number of flatc and exit.\n"
+     "  --strict-json      Strict JSON: field names must be / will be quoted,\n"
+     "                     no trailing commas in tables/vectors.\n"
++    "  --ignore-null-scalar Ignore null values for scalar types\n"
+     "  --allow-non-utf8   Pass non-UTF-8 input through parser and emit nonstandard\n"
+     "                     \\x escapes in JSON. (Default is to raise parse error on\n"
+     "                     non-UTF-8 input.)\n"
+@@ -210,6 +211,8 @@ int FlatCompiler::Compile(int argc, const char **argv) {
+         opts.keep_include_path = true;
+       } else if (arg == "--strict-json") {
+         opts.strict_json = true;
++      } else if (arg == "--ignore-null-scalar") {
++        opts.ignore_null_scalar = true;
+       } else if (arg == "--allow-non-utf8") {
+         opts.allow_non_utf8 = true;
+       } else if (arg == "--natural-utf8") {
 diff --git a/src/idl_gen_js_ts.cpp b/src/idl_gen_js_ts.cpp
-index fea46208..f0d1d944 100644
+index fea46208..cae08bf6 100644
 --- a/src/idl_gen_js_ts.cpp
 +++ b/src/idl_gen_js_ts.cpp
 @@ -82,7 +82,7 @@ class JsTsGenerator : public BaseGenerator {
@@ -125,7 +162,7 @@ index fea46208..f0d1d944 100644
                    const std::string &file_name) {
    jsts::JsTsGenerator generator(parser, path, file_name);
 diff --git a/src/idl_parser.cpp b/src/idl_parser.cpp
-index e26aa550..89fc6393 100644
+index e26aa550..95ba12d8 100644
 --- a/src/idl_parser.cpp
 +++ b/src/idl_parser.cpp
 @@ -255,6 +255,10 @@ CheckedError Parser::Next() {
@@ -139,6 +176,15 @@ index e26aa550..89fc6393 100644
      char c = *cursor_++;
      token_ = c;
      switch (c) {
+@@ -1036,7 +1040,7 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+             ECHECK(SkipAnyJsonValue());
+           }
+         } else {
+-          if (IsIdent("null") && !IsScalar(field->value.type.base_type)) {
++          if (IsIdent("null") && (opts.ignore_null_scalar || !IsScalar(field->value.type.base_type))) {
+             ECHECK(Next());  // Ignore this field.
+           } else {
+             Value val = field->value;
 @@ -1942,6 +1946,11 @@ CheckedError Parser::ParseService() {
    return NoError();
  }
