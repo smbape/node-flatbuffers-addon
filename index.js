@@ -1,6 +1,15 @@
 const addon = require('bindings')('addon.node');
 const fs = require("fs");
 
+const StringBuffer = str => {
+    const buffer = Buffer.from(str);
+    const len = buffer.length;
+    const target = Buffer.allocUnsafe(len + 1);
+    buffer.copy(target);
+    target[len] = 0;
+    return target;
+}
+
 const schemaOptions = options => {
     if (Buffer.isBuffer(options.schema) && options.schema_contents != null) {
         throw new TypeError("if schema option is a Buffer, schema_contents must be null or undefined");
@@ -16,7 +25,7 @@ const schemaOptions = options => {
     }
 
     if (typeof options.schema_contents === "string") {
-        options.schema_contents = Buffer.from(options.schema_contents);
+        options.schema_contents = StringBuffer(options.schema_contents);
     }
 
     if (!Buffer.isBuffer(options.schema_contents)) {
@@ -41,7 +50,7 @@ const schemaOptions = options => {
     }
 
     if (typeof options.conform_contents === "string") {
-        options.conform_contents = Buffer.from(options.conform_contents);
+        options.conform_contents = StringBuffer(options.conform_contents);
     }
 
     if (options.conform_contents != null && !Buffer.isBuffer(options.conform_contents)) {
@@ -60,7 +69,7 @@ const schemaOptions = options => {
         if (Array.isArray(options[prop])) {
             options[prop].forEach((str, i, arr) => {
                 if (typeof str === "string") {
-                    arr[i] = Buffer.from(str);
+                    arr[i] = StringBuffer(str);
                 }
             });
         }
@@ -87,9 +96,9 @@ Object.assign(exports, {
         }
 
         if (typeof options.json_contents === "string") {
-            options.json_contents = Buffer.from(options.json_contents);
+            options.json_contents = StringBuffer(options.json_contents);
         } else if (options.json_contents != null && typeof options.json_contents === "object" && !Buffer.isBuffer(options.json_contents)) {
-            options.json_contents = Buffer.from(JSON.stringify(options.json_contents));
+            options.json_contents = StringBuffer(JSON.stringify(options.json_contents));
         }
 
         if (options.json_contents != null && !Buffer.isBuffer(options.json_contents)) {

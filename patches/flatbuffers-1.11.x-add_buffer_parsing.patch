@@ -11,7 +11,7 @@ index c2ed707a..81cf7b4b 100644
    static std::string NamespaceDir(const Parser &parser, const std::string &path,
                                    const Namespace &ns);
 diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
-index 8299fe0c..76e636d2 100644
+index 8299fe0c..ae166370 100644
 --- a/include/flatbuffers/idl.h
 +++ b/include/flatbuffers/idl.h
 @@ -398,6 +398,7 @@ struct ServiceDef : public Definition {
@@ -30,18 +30,16 @@ index 8299fe0c..76e636d2 100644
          skip_js_exports(false),
          use_goog_js_export_format(false),
          use_ES6_js_export_format(false),
-@@ -524,7 +526,10 @@ struct ParserState {
+@@ -524,6 +526,9 @@ struct ParserState {
          line_start_(nullptr),
          line_(0),
          token_(-1),
--        attr_is_trivial_ascii_string_(true) {}
-+        attr_is_trivial_ascii_string_(true),
 +        has_length_(false),
 +        len_(0),
-+        eof_(nullptr) {}
++        eof_(nullptr),
+         attr_is_trivial_ascii_string_(true) {}
  
   protected:
-   void ResetState(const char *source) {
 @@ -547,6 +552,9 @@ struct ParserState {
    const char *line_start_;
    int line_;  // the current line being parsed
@@ -73,21 +71,6 @@ index 8299fe0c..76e636d2 100644
  // Generate JavaScript or TypeScript code from the definitions in the Parser object.
  // See idl_gen_js.
  extern bool GenerateJSTS(const Parser &parser,
-diff --git a/include/flatbuffers/util.h b/include/flatbuffers/util.h
-index 4367bbec..58836cf5 100644
---- a/include/flatbuffers/util.h
-+++ b/include/flatbuffers/util.h
-@@ -114,9 +114,7 @@ template<typename T> std::string NumToString(T t) {
-   // clang-format off
- 
-   #ifndef FLATBUFFERS_PREFER_PRINTF
--    std::stringstream ss;
--    ss << t;
--    return ss.str();
-+    return std::to_string(t);
-   #else // FLATBUFFERS_PREFER_PRINTF
-     auto v = static_cast<long long>(t);
-     return NumToStringImplWrapper(v, "%.*lld");
 diff --git a/src/code_generators.cpp b/src/code_generators.cpp
 index 3b10db7f..5bdb0ce5 100644
 --- a/src/code_generators.cpp
