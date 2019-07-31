@@ -13,15 +13,15 @@ const buffer = flatc.binary(options);
 
 `type: String|Buffer`
 
-Schema path.
-
 if `schema` is a String and `schema_contents` is `null` or `undefined`, `schema` will be treated as `schema_contents`.
+otherwise, it will be treated as the schema file path.
 
 ### options.schema_contents
 
 `type: String|Buffer`
 
-Schema contents.
+The schema contents.
+If the `schema_contents` is a schema binary, the `schema` file path must end with `.bfbs`.
 
 ### options.schema_length
 
@@ -31,12 +31,24 @@ schema contents length to parse.
 
 ### options.schema_binary
 
-**NOT TESTED**
-
 `type: bool`
 `default: false`
 
 Serialize schemas instead of JSON
+
+### options.json
+
+`type: String|Buffer|Object`
+
+if `json` is a String and `json_contents` is `null` or `undefined`, `json` will be treated as `json_contents`.
+if `json` is a Buffer or an Object, `json` will be treated as `json_contents`.
+otherwise `json` must be a String and will be treated as the path to the JSON.
+
+### options.json_contents
+
+`type: String|Buffer|Object`
+
+The JSON to serialize
 
 ### options.include_directories
 
@@ -96,8 +108,6 @@ Allow scalar fields to be null
 Pass non-UTF-8 input through parser
 
 ### options.skip\_unexpected\_fields\_in_json
-
-**NOT TESTED**
 
 `type: bool`
 `default: false`
@@ -170,15 +180,15 @@ const code = flatc.js(options);
 
 `type: String|Buffer`
 
-Schema path.
-
 if `schema` is a String and `schema_contents` is `null` or `undefined`, `schema` will be treated as `schema_contents`.
+otherwise, it will be treated as the schema file path.
 
 ### options.schema_contents
 
 `type: String|Buffer`
 
-Schema contents.
+The schema contents.
+If the `schema_contents` is a schema binary, the `schema` file path must end with `.bfbs`.
 
 ### options.schema_length
 

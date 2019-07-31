@@ -2,13 +2,12 @@ const addon = require('bindings')('addon.node');
 const fs = require("fs");
 
 const StringBuffer = str => {
-    const buffer = Buffer.from(str);
-    const len = buffer.length;
-    const target = Buffer.allocUnsafe(len + 1);
-    buffer.copy(target);
-    target[len] = 0;
-    return target;
-}
+    const len = Buffer.byteLength(str, "utf8");
+    const buffer = Buffer.allocUnsafe(len + 1);
+    buffer.write(str, "utf8");
+    buffer[len] = 0;
+    return buffer;
+};
 
 const schemaOptions = options => {
     if (Buffer.isBuffer(options.schema) && options.schema_contents != null) {
@@ -75,15 +74,19 @@ const schemaOptions = options => {
         }
     });
 
+    if (typeof options.include_prefix === "string") {
+        options.include_prefix = StringBuffer(options.include_prefix);
+    }
+
     return options;
-}
+};
 
 Object.assign(exports, {
     binary: options => {
         options = schemaOptions(Object.assign({}, options));
 
-        if (Buffer.isBuffer(options.json) && options.json_contents != null) {
-            throw new TypeError("if json option is a Buffer, json_contents must be null or undefined");
+        if (options.json_contents != null && (Buffer.isBuffer(options.json) || typeof options.json === "object")) {
+            throw new TypeError("if json option is a Buffer or an Object, json_contents must be null or undefined");
         }
 
         if (options.json != null && options.json_contents == null) {

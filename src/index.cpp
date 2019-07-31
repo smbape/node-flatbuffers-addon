@@ -108,7 +108,12 @@ namespace NODE_GYP_MODULE_NAME {
         opts.identifier = identifier;                           \
     }
 
-static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename, const char *contents, std::vector<const char *> &include_directories) {
+static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename, const char *contents, const size_t size, std::vector<const char *> &include_directories) {
+ 
+    if (flatbuffers::GetExtension(filename) == reflection::SchemaExtension()) {
+        return parser.Deserialize(reinterpret_cast<const uint8_t *>(contents), size);
+    }
+
     auto local_include_directory = flatbuffers::StripFileName(filename);
     include_directories.push_back(local_include_directory.c_str());
     include_directories.push_back(nullptr);
@@ -139,7 +144,7 @@ static void GenerateBinary_(
             ASSERT_GET_STRING_ARRAY_OPT(options, opt, "conform_include_directories", conform_include_directories);
 
             conform_parser.SetContentLength(true, conform_length);
-            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_include_directories);
+            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_length, conform_include_directories);
             auto err = parser.ConformTo(conform_parser);
             if (!err.empty()) {
                 std::stringstream errss;
@@ -164,7 +169,7 @@ static void GenerateBinary_(
         ASSERT_GET_UINT32_OPT(options, opt, "json_length", json_length);
 
         parser.SetContentLength(true, json_length);
-        if (!ParseFile(parser, std::string(*json), json_contents, include_directories)) {
+        if (!ParseFile(parser, std::string(*json), json_contents, json_length, include_directories)) {
             ThrowTypeError(parser.error_.c_str());
             return;
         }
@@ -218,7 +223,7 @@ NAN_METHOD(GenerateBinary) {
     ASSERT_GET_STRING_ARRAY_OPT(options, opt, "include_directories", include_directories);
 
     parser->SetContentLength(true, schema_length);
-    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, include_directories)) {
+    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, schema_length, include_directories)) {
         parser->builder_.Reset();
         ThrowTypeError(parser->error_.c_str());
         return;
@@ -246,7 +251,7 @@ static void GenerateJS_(
             ASSERT_GET_STRING_ARRAY_OPT(options, opt, "conform_include_directories", conform_include_directories);
 
             conform_parser.SetContentLength(true, conform_length);
-            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_include_directories);
+            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_length, conform_include_directories);
             auto err = parser.ConformTo(conform_parser);
             if (!err.empty()) {
                 std::stringstream errss;
@@ -315,7 +320,7 @@ NAN_METHOD(GenerateJS) {
     ASSERT_GET_STRING_ARRAY_OPT(options, opt, "include_directories", include_directories);
 
     parser->SetContentLength(true, schema_length);
-    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, include_directories)) {
+    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, schema_length, include_directories)) {
         ThrowTypeError(parser->error_.c_str());
         return;
     }
