@@ -1,4 +1,5 @@
 /* eslint-env node, mocha */
+/* eslint-disable no-magic-numbers, default-case, no-var */
 
 const {assert} = require("chai");
 const {flatbuffers} = require("flatbuffers");

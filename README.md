@@ -58,8 +58,6 @@ Include directories for schemas
 
 ### options.conform
 
-**NOT TESTED**
-
 `type: String|Buffer`
 
 Specify a schema the following `schema` should be an evolution of.
@@ -68,15 +66,11 @@ if `conform` is a String and `conform_contents` is `null` or `undefined`, `confo
 
 ### options.conform_contents
 
-**NOT TESTED**
-
 `type: String|Buffer`
 
 Conform schema contents.
 
 ### options.conform\_include_directories
-
-**NOT TESTED**
 
 `type: [String]`
 
@@ -162,12 +156,10 @@ Add builtin attributes to the binary schema files.
 
 ### options.force_defaults
 
-**NOT TESTED**
-
 `type: bool`
 `default: false`
 
-Emit default values in binary output from JSON.
+If false, don't serialize values equal to the default, therefore reducing size of the binary output.
 
 ## Generate js
 
@@ -204,8 +196,6 @@ Include directories for schemas
 
 ### options.conform
 
-**NOT TESTED**
-
 `type: String|Buffer`
 
 Specify a schema the following `schema` should be an evolution of.
@@ -214,15 +204,11 @@ if `conform` is a String and `conform_contents` is `null` or `undefined`, `confo
 
 ### options.conform_contents
 
-**NOT TESTED**
-
 `type: String|Buffer`
 
 Conform schema contents.
 
 ### options.conform\_include_directories
-
-**NOT TESTED**
 
 `type: [String]`
 

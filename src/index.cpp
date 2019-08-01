@@ -7,8 +7,6 @@
 #include "flatbuffers/flatbuffers.h"
 #include "flatbuffers/idl.h"
 
-using namespace Nan;
-
 namespace NODE_GYP_MODULE_NAME {
 
 #define INIT_OPT_VARIABLES \
@@ -22,13 +20,13 @@ namespace NODE_GYP_MODULE_NAME {
 #define ASSERT_GET_STRING_OPT(options, opt, name, identifier)   \
     opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
     if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        ThrowTypeError(name " option is required");             \
+        Nan::ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
     value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsString()) {                                   \
-        ThrowTypeError(name " option must be a string");        \
+        Nan::ThrowTypeError(name " option must be a string");        \
         return;                                                 \
     }                                                           \
     Nan::Utf8String identifier(value)
@@ -36,13 +34,13 @@ namespace NODE_GYP_MODULE_NAME {
 #define ASSERT_GET_BUFFER_OPT(options, opt, name, identifier)   \
     opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
     if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        ThrowTypeError(name " option is required");             \
+        Nan::ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
     value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsObject()) {                                   \
-        ThrowTypeError(name " option must be a buffer");        \
+        Nan::ThrowTypeError(name " option must be a buffer");        \
         return;                                                 \
     }                                                           \
     char* identifier = (char*) node::Buffer::Data(value)
@@ -50,13 +48,13 @@ namespace NODE_GYP_MODULE_NAME {
 #define ASSERT_GET_UINT32_OPT(options, opt, name, identifier)   \
     opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
     if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        ThrowTypeError(name " option is required");             \
+        Nan::ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
     value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsUint32()) {                                   \
-        ThrowTypeError(name " option must be a positive integer");\
+        Nan::ThrowTypeError(name " option must be a positive integer");\
         return;                                                 \
     }                                                           \
     unsigned int identifier = value->ToUint32(context).ToLocalChecked()->Value()
@@ -64,13 +62,13 @@ namespace NODE_GYP_MODULE_NAME {
 #define ASSERT_GET_STRING_ARRAY_OPT(options, opt, name, identifier)\
     opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
     if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        ThrowTypeError(name " option is required");             \
+        Nan::ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
     value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsArray()) {                                    \
-        ThrowTypeError(name " option must be an array");        \
+        Nan::ThrowTypeError(name " option must be an array");        \
         return;                                                 \
     }                                                           \
     array = v8::Local<v8::Array>::Cast(value);                          \
@@ -81,7 +79,7 @@ namespace NODE_GYP_MODULE_NAME {
         if (!value->IsObject()) {                               \
             std::stringstream err;                              \
             err << "element " << (i + 1) << " of " << name << " must be a buffer"; \
-            ThrowTypeError(err.str().c_str());                  \
+            Nan::ThrowTypeError(err.str().c_str());                  \
             return;                                             \
         }                                                       \
         identifier.push_back((char*) node::Buffer::Data(value));\
@@ -90,13 +88,13 @@ namespace NODE_GYP_MODULE_NAME {
 #define ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier)  \
     opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
     if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        ThrowTypeError(name " option is required");             \
+        Nan::ThrowTypeError(name " option is required");             \
         return;                                                 \
     }                                                           \
                                                                 \
     value = Nan::Get(options, opt).ToLocalChecked();            \
     if (!value->IsBoolean()) {                                  \
-        ThrowTypeError(name " option must be a boolean");       \
+        Nan::ThrowTypeError(name " option must be a boolean");       \
         return;                                                 \
     }                                                           \
     bool identifier = value->ToBoolean(context).ToLocalChecked()->Value()
@@ -126,7 +124,7 @@ static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename, 
 }
 
 static void GenerateBinary_(
-    NAN_METHOD_ARGS_TYPE &info,
+    Nan::NAN_METHOD_ARGS_TYPE &info,
     flatbuffers::Parser &parser,
     flatbuffers::Parser &conform_parser,
     std::vector<const char *> &include_directories,
@@ -149,7 +147,7 @@ static void GenerateBinary_(
             if (!err.empty()) {
                 std::stringstream errss;
                 errss << "schemas don\'t conform: " << err;
-                ThrowTypeError(errss.str().c_str());
+                Nan::ThrowTypeError(errss.str().c_str());
                 return;
             }
         }
@@ -170,7 +168,7 @@ static void GenerateBinary_(
 
         parser.SetContentLength(true, json_length);
         if (!ParseFile(parser, std::string(*json), json_contents, json_length, include_directories)) {
-            ThrowTypeError(parser.error_.c_str());
+            Nan::ThrowTypeError(parser.error_.c_str());
             return;
         }
     }
@@ -182,7 +180,7 @@ static void GenerateBinary_(
     } else {
         char *buffer = reinterpret_cast<char *>(parser.builder_.GetBufferPointer());
         size_t len = parser.builder_.GetSize();
-        ret = CopyBuffer(buffer, len).ToLocalChecked(); // Make v8 allocator handle gc when needed
+        ret = Nan::CopyBuffer(buffer, len).ToLocalChecked(); // Make v8 allocator handle gc when needed
     }
 
     info.GetReturnValue().Set(ret);
@@ -190,7 +188,7 @@ static void GenerateBinary_(
 
 NAN_METHOD(GenerateBinary) {
     if (!info[0]->IsObject()) {
-        ThrowTypeError("First argument should be an v8::Object.");
+        Nan::ThrowTypeError("First argument should be an v8::Object.");
         return;
     }
 
@@ -198,7 +196,7 @@ NAN_METHOD(GenerateBinary) {
     flatbuffers::IDLOptions opts;
     opts.lang = flatbuffers::IDLOptions::kBinary;
 
-    v8::Local<v8::Object> options = To<v8::Object>(info[0]).ToLocalChecked();
+    v8::Local<v8::Object> options = Nan::To<v8::Object>(info[0]).ToLocalChecked();
 
     SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
     SET_BOOLEAN_OPT(options, opt, opts, "ignore_null_scalar", ignore_null_scalar);
@@ -225,7 +223,7 @@ NAN_METHOD(GenerateBinary) {
     parser->SetContentLength(true, schema_length);
     if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, schema_length, include_directories)) {
         parser->builder_.Reset();
-        ThrowTypeError(parser->error_.c_str());
+        Nan::ThrowTypeError(parser->error_.c_str());
         return;
     }
 
@@ -236,7 +234,7 @@ NAN_METHOD(GenerateBinary) {
 }
 
 static void GenerateJS_(
-    NAN_METHOD_ARGS_TYPE &info,
+    Nan::NAN_METHOD_ARGS_TYPE &info,
     flatbuffers::Parser &parser,
     flatbuffers::Parser &conform_parser,
     v8::Local<v8::Object> &options
@@ -256,7 +254,7 @@ static void GenerateJS_(
             if (!err.empty()) {
                 std::stringstream errss;
                 errss << "schemas don\'t conform: " << err;
-                ThrowTypeError(errss.str().c_str());
+                Nan::ThrowTypeError(errss.str().c_str());
                 return;
             }
         }
@@ -268,13 +266,13 @@ static void GenerateJS_(
 
 NAN_METHOD(GenerateJS) {
     if (!info[0]->IsObject()) {
-        ThrowTypeError("First argument should be an v8::Object.");
+        Nan::ThrowTypeError("First argument should be an v8::Object.");
         return;
     }
 
     INIT_OPT_VARIABLES
     flatbuffers::IDLOptions opts;
-    v8::Local<v8::Object> options = To<v8::Object>(info[0]).ToLocalChecked();
+    v8::Local<v8::Object> options = Nan::To<v8::Object>(info[0]).ToLocalChecked();
 
     opts.lang = flatbuffers::IDLOptions::kJs;
 
@@ -303,7 +301,7 @@ NAN_METHOD(GenerateJS) {
     if (Nan::HasOwnProperty(options, opt).FromJust()) {
         value = Nan::Get(options, opt).ToLocalChecked();
         if (!value->IsObject()) {
-            ThrowTypeError("include_prefix" " option must be a buffer");
+            Nan::ThrowTypeError("include_prefix" " option must be a buffer");
             return;
         }
         opts.include_prefix = flatbuffers::ConCatPathFileName(flatbuffers::PosixPath((char*) node::Buffer::Data(value)), "");
@@ -321,7 +319,7 @@ NAN_METHOD(GenerateJS) {
 
     parser->SetContentLength(true, schema_length);
     if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, schema_length, include_directories)) {
-        ThrowTypeError(parser->error_.c_str());
+        Nan::ThrowTypeError(parser->error_.c_str());
         return;
     }
 

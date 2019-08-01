@@ -1,5 +1,4 @@
-const addon = require('bindings')('addon.node');
-const fs = require("fs");
+const addon = require("bindings")("addon.node");
 
 const StringBuffer = str => {
     const len = Buffer.byteLength(str, "utf8");
@@ -9,55 +8,48 @@ const StringBuffer = str => {
     return buffer;
 };
 
+const setOption = (options, prop, basename, ext, stringify) => {
+    if (options[prop] != null && options[`${ prop }_contents`] == null) {
+        options[`${ prop }_contents`] = options[prop];
+        options[prop] = null;
+    }
+
+    if (options[prop] == null && options[`${ prop }_contents`] != null) {
+        options[prop] = `${ basename || prop }.${ ext }`;
+    }
+
+    if (stringify && options[`${ prop }_contents`] !== null && typeof options[`${ prop }_contents`] === "object" && !Buffer.isBuffer(options[`${ prop }_contents`])) {
+        options[`${ prop }_contents`] = JSON.stringify(options[`${ prop }_contents`]);
+    }
+
+    if (typeof options[`${ prop }_contents`] === "string") {
+        options[`${ prop }_contents`] = StringBuffer(options[`${ prop }_contents`]);
+    }
+
+    if (options[`${ prop }_contents`] != null && !Buffer.isBuffer(options[`${ prop }_contents`])) {
+        throw new TypeError(`${ prop }_contents must be a string or a Buffer`);
+    }
+
+    if (options[`${ prop }_length`] == null && options[`${ prop }_contents`]) {
+        options[`${ prop }_length`] = options[`${ prop }_contents`].length;
+    }
+
+    if (options[`${ prop }_contents`] != null && Buffer.isBuffer(options[prop])) {
+        throw new TypeError(`if ${ prop } is a Buffer, ${ prop }_contents must be null or undefined`);
+    }
+
+    if (options[prop] != null && typeof options[prop] !== "string") {
+        throw new TypeError(`${ prop } must be a string`);
+    }
+};
+
 const schemaOptions = options => {
-    if (Buffer.isBuffer(options.schema) && options.schema_contents != null) {
-        throw new TypeError("if schema option is a Buffer, schema_contents must be null or undefined");
-    }
+    [ "schema", "conform" ].forEach(prop => {
+        setOption(options, prop, prop, "fbs");
+    });
 
-    if (options.schema != null && options.schema_contents == null) {
-        options.schema_contents = options.schema;
-        options.schema = null;
-    }
-
-    if (options.schema == null && options.schema_contents != null) {
-        options.schema = "schema.fbs";
-    }
-
-    if (typeof options.schema_contents === "string") {
-        options.schema_contents = StringBuffer(options.schema_contents);
-    }
-
-    if (!Buffer.isBuffer(options.schema_contents)) {
-        throw new TypeError("schema_contents must either be a string or a Buffer");
-    }
-
-    if (options.schema_length == null) {
-        options.schema_length = options.schema_contents.length;
-    }
-
-    if (Buffer.isBuffer(options.conform) && options.conform_contents != null) {
-        throw new TypeError("if conform option is a Buffer, conform_contents must be null or undefined");
-    }
-
-    if (options.conform != null && options.conform_contents == null) {
-        options.conform_contents = options.conform;
-        options.conform = null;
-    }
-
-    if (options.conform == null && options.conform_contents != null) {
-        options.conform = "conform.fbs";
-    }
-
-    if (typeof options.conform_contents === "string") {
-        options.conform_contents = StringBuffer(options.conform_contents);
-    }
-
-    if (options.conform_contents != null && !Buffer.isBuffer(options.conform_contents)) {
-        throw new TypeError("conform_contents must either be a string or a Buffer");
-    }
-
-    if (options.conform_contents != null && options.conform_length == null) {
-        options.conform_length = options.conform_contents.length;
+    if (!options.schema_contents) {
+        throw new TypeError("schema_contents must be a string or a Buffer");
     }
 
     [ "include_directories", "conform_include_directories" ].forEach(prop => {
@@ -66,9 +58,11 @@ const schemaOptions = options => {
         }
 
         if (Array.isArray(options[prop])) {
-            options[prop].forEach((str, i, arr) => {
-                if (typeof str === "string") {
-                    arr[i] = StringBuffer(str);
+            options[prop].forEach((item, i, arr) => {
+                if (typeof item === "string") {
+                    arr[i] = StringBuffer(item);
+                } else if (!Buffer.isBuffer(item)) {
+                    throw new TypeError(`element ${ i } of ${ prop } must be a string or a Buffer`);
                 }
             });
         }
@@ -85,32 +79,7 @@ Object.assign(exports, {
     binary: options => {
         options = schemaOptions(Object.assign({}, options));
 
-        if (options.json_contents != null && (Buffer.isBuffer(options.json) || typeof options.json === "object")) {
-            throw new TypeError("if json option is a Buffer or an Object, json_contents must be null or undefined");
-        }
-
-        if (options.json != null && options.json_contents == null) {
-            options.json_contents = options.json;
-            options.json = null;
-        }
-
-        if (options.json == null && options.json_contents != null) {
-            options.json = "data.json";
-        }
-
-        if (typeof options.json_contents === "string") {
-            options.json_contents = StringBuffer(options.json_contents);
-        } else if (options.json_contents != null && typeof options.json_contents === "object" && !Buffer.isBuffer(options.json_contents)) {
-            options.json_contents = StringBuffer(JSON.stringify(options.json_contents));
-        }
-
-        if (options.json_contents != null && !Buffer.isBuffer(options.json_contents)) {
-            throw new TypeError("json_contents must either be a string, a Buffer or an Object");
-        }
-
-        if (options.json_contents != null && options.json_length == null) {
-            options.json_length = options.json_contents.length;
-        }
+        setOption(options, "json", "data", "json", true);
 
         if (options.schema_binary && options.json_contents != null) {
             throw new TypeError("if schema_binary option is true, json_contents must be null or undefined");

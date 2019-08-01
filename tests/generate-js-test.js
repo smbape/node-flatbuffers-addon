@@ -1,8 +1,10 @@
+/* eslint-env node, mocha */
+
 const { expect } = require("chai");
 const { flatbuffers } = require("flatbuffers");
 const addon = require("../");
 
-const parseLong = (value) => {
+const parseLong = value => {
     if (value instanceof flatbuffers.Long) {
         value = parseInt(value.high.toString(16) + value.low.toString(16), 16);
     }
@@ -90,225 +92,350 @@ const pick = (obj, props) => {
     return ret;
 };
 
+const testFlatbuffers = (js, binary, expected, test) => {
+    const sandbox = {};
+    (new Function(js)).call(sandbox); // eslint-disable-line no-new-func
+    const nsp = sandbox.some.nested.namespace;
+    plainAccessor(nsp);
+
+    const bytes = new Uint8Array(binary);
+    const buf = new flatbuffers.ByteBuffer(bytes);
+    const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books", "cdate"]);
+
+    for (let i = 0, len = actual.books.length; i < len; i++) {
+        actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres", "rank"]);
+    }
+
+    if (typeof test === "function") {
+        test(actual, expected);
+    }
+
+    expect(actual.name).to.equal(expected.name);
+    expect(actual.books).to.deep.equal(expected.books);
+};
+
 const DEFAULT_SCHEMA = `
     namespace some.nested.namespace;
 
     file_extension "dat";
 
     table Book {
-        id:string (id: 0);
-        title:string (id: 1);
+        id:     string (id: 0);
+        title:  string (id: 1);
         authors:[string] (id: 2);
         release:ulong (id: 3);
         genres: [ulong] (id: 4);
     }
 
     table Library {
-        name:string (id: 0);
+        name:  string (id: 0);
         books: [Book] (id: 1);
+        cdate: ulong = 1 (id: 2);
     }
 
     root_type Library;
 `;
 
-describe("generate-js", function () {
-    it("should generate js", () => {
-        const schema = "Library.fbs";
-        const schema_contents = Buffer.from(`
-            namespace some.nested.namespace;
+const DEFAULT_SCHEMA_BUFFER = Buffer.from(DEFAULT_SCHEMA);
 
-            file_extension "dat";
+const DEFAULT_RANKED_SCHEMA = `
+    namespace some.nested.namespace;
 
-            table Book {
-                id:string (id: 0);
-                title:string (id: 1);
-                authors:[string] (id: 2);
-                release:ulong (id: 3);
-                genres: [ulong] (id: 4);
-                rank:uint (id: 5);
-            }
+    file_extension "dat";
 
-            table Library {
-                name:string (id: 0);
-                books: [Book] (id: 1);
-            }
+    table Book {
+        id:     string (id: 0);
+        title:  string (id: 1);
+        authors:[string] (id: 2);
+        release:ulong (id: 3);
+        genres: [ulong] (id: 4);
+        rank:   uint (id: 5);
+    }
 
-            root_type Library;
-        `);
+    table Library {
+        name:string (id: 0);
+        books: [Book] (id: 1);
+        cdate: ulong = 1 (id: 2);
+    }
 
-        const js = addon.js({
-            schema,
-            schema_contents,
-            schema_length: schema_contents.length
-        });
+    root_type Library;
+`;
 
-        const library = {
-            name: "BookShop 0",
-            books: []
-        };
+const DEFAULT_RANKED_SCHEMA_BUFFER = Buffer.from(DEFAULT_RANKED_SCHEMA);
 
-        for (let i = 0; i < 10; i++) {
-            library.books[i] = {
-                id: `book-${ i }`,
-                title: `Book ${ i }`,
-                authors: [`Author ${ i }`],
-                release: Math.floor(Date.now() / 1000),
-                genres: [ Math.floor(Math.random() * 1000) ]
-            };
-        }
+const DEFAULT_LIBRARY = {
+    name: "BookShop 0",
+    books: [],
+    cdate: 1
+};
 
-        const json = "library.json";
-        const json_contents = Buffer.from(JSON.stringify(library));
+for (let i = 0; i < 4; i++) {
+    DEFAULT_LIBRARY.books[i] = {
+        id: `book-${ i }`,
+        title: `Book ${ i }`,
+        authors: [`Author ${ i }`],
+        release: Math.floor(Date.now() / 1000),
+        genres: [ Math.floor(Math.random() * 1000) ]
+    };
+}
 
-        const binary = addon.binary({
-            schema,
-            schema_contents,
-            schema_length: schema_contents.length,
-            json,
-            json_contents,
-            json_length: json_contents.length
-        });
+const DEFAULT_LIBRARY_JSON = JSON.stringify(DEFAULT_LIBRARY);
+const DEFAULT_LIBRARY_JSON_BUFFER = Buffer.from(DEFAULT_LIBRARY_JSON);
 
-        const sandbox = {};
-        (new Function(js)).call(sandbox);
-        const nsp = sandbox.some.nested.namespace;
-        plainAccessor(nsp);
 
-        const bytes = new Uint8Array(binary);
-        const buf = new flatbuffers.ByteBuffer(bytes);
-        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
+describe("generate-js", () => {
+    it("should generate with {schema, json}", () => {
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA_BUFFER,
+            json: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
 
-        for (var i = 0, len = actual.books.length; i < len; i++) {
-            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
-        }
-
-        expect(actual.name).to.equal(library.name);
-        expect(actual.books).to.deep.equal(library.books);
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
     });
 
-    it("should generate js with only schema,json", () => {
-        const schema_contents = Buffer.from(DEFAULT_SCHEMA);
+    it("should generate with {schema_contents, json}", () => {
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            json: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
 
-        const js = addon.js({
-            schema: schema_contents
-        });
-
-        const library = {
-            name: "BookShop 0",
-            books: []
-        };
-
-        for (let i = 0; i < 10; i++) {
-            library.books[i] = {
-                id: `book-${ i }`,
-                title: `Book ${ i }`,
-                authors: [`Author ${ i }`],
-                release: Math.floor(Date.now() / 1000),
-                genres: [ Math.floor(Math.random() * 1000) ]
-            };
-        }
-
-        const json_contents = Buffer.from(JSON.stringify(library));
-
-        const binary = addon.binary({
-            schema: schema_contents,
-            json: json_contents
-        });
-
-        const sandbox = {};
-        (new Function(js)).call(sandbox);
-        const nsp = sandbox.some.nested.namespace;
-        plainAccessor(nsp);
-
-        const bytes = new Uint8Array(binary);
-        const buf = new flatbuffers.ByteBuffer(bytes);
-        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
-
-        for (var i = 0, len = actual.books.length; i < len; i++) {
-            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
-        }
-
-        expect(actual.name).to.equal(library.name);
-        expect(actual.books).to.deep.equal(library.books);
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
     });
 
-    it("should generate js with string schema and object json", () => {
-        const schema_contents = DEFAULT_SCHEMA;
+    it("should generate with {schema, schema_contents, json}", () => {
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            json: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
 
-        const js = addon.js({
-            schema: schema_contents
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should generate with {schema, json_contents}", () => {
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA_BUFFER,
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should generate with {schema_contents, json_contents}", () => {
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA,
+            json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should generate with {schema, schema_contents, json_contents}", () => {
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA,
+            json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should generate with {schema, json, json_contents}", () => {
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA_BUFFER,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should generate with {schema_contents, json, json_contents}", () => {
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should generate with {schema, schema_contents, json, json_contents}", () => {
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should schema_binary", () => {
+        const schema = "Library.bfbs";
+
+        const schema_contents = addon.binary({
+            schema: schema.replace(".bfbs", ".fbs"),
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            schema_binary: true
         });
 
+        testFlatbuffers(addon.js({
+            schema,
+            schema_contents
+        }), addon.binary({
+            schema,
+            schema_contents,
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        }), DEFAULT_LIBRARY);
+    });
+
+    it("should force_defaults", () => {
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA.replace("ulong = 1", "ulong = 2")
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY_JSON,
+            force_defaults: false
+        }), DEFAULT_LIBRARY, (actual, expected) => {
+            expect(actual.cdate).to.equal(2);
+        });
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA.replace("ulong = 1", "ulong = 2")
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY_JSON,
+            force_defaults: true
+        }), DEFAULT_LIBRARY, (actual, expected) => {
+            expect(actual.cdate).to.equal(1);
+        });
+    });
+
+    it("should conform", () => {
         const library = {
             name: "BookShop 0",
             books: []
         };
 
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 4; i++) {
             library.books[i] = {
                 id: `book-${ i }`,
                 title: `Book ${ i }`,
                 authors: [`Author ${ i }`],
                 release: Math.floor(Date.now() / 1000),
-                genres: [ Math.floor(Math.random() * 1000) ]
+                genres: [ Math.floor(Math.random() * 1000) ],
+                rank: i + 1
             };
         }
 
-        const binary = addon.binary({
-            schema: schema_contents,
+        expect(() => {
+            addon.js({
+                schema: DEFAULT_RANKED_SCHEMA,
+                conform: DEFAULT_SCHEMA.replace("release:ulong", "release:uint")
+            });
+        }).to.throw(TypeError);
+
+        expect(() => {
+            addon.binary({
+                schema: DEFAULT_RANKED_SCHEMA,
+                conform: DEFAULT_SCHEMA.replace("release:ulong", "release:uint"),
+                json: library
+            });
+        }).to.throw(TypeError);
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_RANKED_SCHEMA,
+            conform: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_RANKED_SCHEMA,
+            conform: DEFAULT_SCHEMA,
             json: library
-        });
-
-        const sandbox = {};
-        (new Function(js)).call(sandbox);
-        const nsp = sandbox.some.nested.namespace;
-        plainAccessor(nsp);
-
-        const bytes = new Uint8Array(binary);
-        const buf = new flatbuffers.ByteBuffer(bytes);
-        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
-
-        for (var i = 0, len = actual.books.length; i < len; i++) {
-            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
-        }
-
-        expect(actual.name).to.equal(library.name);
-        expect(actual.books).to.deep.equal(library.books);
+        }), library);
     });
 
-    it("should ignore_null_scalar generate js", () => {
-        const schema_contents = Buffer.from(`
-            namespace some.nested.namespace;
-
-            file_extension "dat";
-
-            table Book {
-                id:string (id: 0);
-                title:string (id: 1);
-                authors:[string] (id: 2);
-                release:ulong (id: 3);
-                genres: [ulong] (id: 4);
-                rank: uint (id: 5);
-            }
-
-            table Library {
-                name:string (id: 0);
-                books: [Book] (id: 1);
-            }
-
-            root_type Library;
-        `);
-
-        const js = addon.js({
-            schema: schema_contents
-        });
-
+    it("should ignore_null_scalar", () => {
         const library = {
             name: "BookShop 0",
             books: []
         };
 
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 4; i++) {
             library.books[i] = {
                 id: `book-${ i }`,
                 title: `Book ${ i }`,
@@ -322,130 +449,26 @@ describe("generate-js", function () {
         const json_contents = Buffer.from(JSON.stringify(library));
 
         // Ignore null scalar
-        for (let i = 0; i < 10; i++) {
-            delete library.books[i].rank;
+        for (let i = 0; i < 4; i++) {
+            library.books[i].rank = 0;
         }
 
-        const binary = addon.binary({
-            schema: schema_contents,
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_RANKED_SCHEMA_BUFFER
+        }), addon.binary({
+            schema: DEFAULT_RANKED_SCHEMA_BUFFER,
             json: json_contents,
             ignore_null_scalar: true
-        });
-
-        const sandbox = {};
-        (new Function(js)).call(sandbox);
-        const nsp = sandbox.some.nested.namespace;
-        plainAccessor(nsp);
-
-        const bytes = new Uint8Array(binary);
-        const buf = new flatbuffers.ByteBuffer(bytes);
-        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
-
-        for (var i = 0, len = actual.books.length; i < len; i++) {
-            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
-        }
-
-        expect(actual.name).to.equal(library.name);
-        expect(actual.books).to.deep.equal(library.books);
+        }), library);
     });
 
-    it("should generate schema binary", () => {
-        const schema = "Library.bfbs";
-        let schema_contents = Buffer.from(`
-            namespace some.nested.namespace;
-
-            file_extension "dat";
-
-            table Book {
-                id:string (id: 0);
-                title:string (id: 1);
-                authors:[string] (id: 2);
-                release:ulong (id: 3);
-                genres: [ulong] (id: 4);
-                rank:uint (id: 5);
-            }
-
-            table Library {
-                name:string (id: 0);
-                books: [Book] (id: 1);
-            }
-
-            root_type Library;
-        `);
-
-        schema_contents = addon.binary({
-            schema: schema.replace(".bfbs", ".fbs"),
-            schema_contents,
-            schema_length: schema_contents.length,
-            schema_binary: true
-        });
-
-        const js = addon.js({
-            schema,
-            schema_contents,
-            schema_length: schema_contents.length
-        });
-
+    it("should skip_unexpected_fields_in_json", () => {
         const library = {
             name: "BookShop 0",
             books: []
         };
 
-        for (let i = 0; i < 10; i++) {
-            library.books[i] = {
-                id: `book-${ i }`,
-                title: `Book ${ i }`,
-                authors: [`Author ${ i }`],
-                release: Math.floor(Date.now() / 1000),
-                genres: [ Math.floor(Math.random() * 1000) ]
-            };
-        }
-
-        const json = "library.json";
-        const json_contents = Buffer.from(JSON.stringify(library));
-
-        const binary = addon.binary({
-            schema,
-            schema_contents,
-            schema_length: schema_contents.length,
-            json,
-            json_contents,
-            json_length: json_contents.length
-        });
-
-        const sandbox = {};
-        (new Function(js)).call(sandbox);
-        const nsp = sandbox.some.nested.namespace;
-        plainAccessor(nsp);
-
-        const bytes = new Uint8Array(binary);
-        const buf = new flatbuffers.ByteBuffer(bytes);
-        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
-
-        for (var i = 0, len = actual.books.length; i < len; i++) {
-            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
-        }
-
-        expect(actual.name).to.equal(library.name);
-        expect(actual.books).to.deep.equal(library.books);
-    });
-
-    it("should generate js", () => {
-        const schema = "Library.fbs";
-        const schema_contents = Buffer.from(DEFAULT_SCHEMA);
-
-        const js = addon.js({
-            schema,
-            schema_contents,
-            schema_length: schema_contents.length
-        });
-
-        const library = {
-            name: "BookShop 0",
-            books: []
-        };
-
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 4; i++) {
             library.books[i] = {
                 id: `book-${ i }`,
                 title: `Book ${ i }`,
@@ -460,46 +483,25 @@ describe("generate-js", function () {
         const json_contents = Buffer.from(JSON.stringify(library));
 
         // Skip unexpected fields in json
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 4; i++) {
             delete library.books[i].rank;
         }
 
         expect(() => {
             addon.binary({
-                schema,
-                schema_contents,
-                schema_length: schema_contents.length,
+                schema_contents: DEFAULT_SCHEMA_BUFFER,
                 json,
-                json_contents,
-                json_length: json_contents.length
+                json_contents
             });
         }).to.throw(TypeError);
 
-        const binary = addon.binary({
-            schema,
-            schema_contents,
-            schema_length: schema_contents.length,
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA_BUFFER,
             json,
             json_contents,
-            json_length: json_contents.length,
             skip_unexpected_fields_in_json: true
-        });
-
-        const sandbox = {};
-        (new Function(js)).call(sandbox);
-        const nsp = sandbox.some.nested.namespace;
-        plainAccessor(nsp);
-
-        const bytes = new Uint8Array(binary);
-        const buf = new flatbuffers.ByteBuffer(bytes);
-        const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books"]);
-
-        for (var i = 0, len = actual.books.length; i < len; i++) {
-            actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres"]);
-        }
-
-        expect(actual.name).to.equal(library.name);
-        expect(actual.books).to.deep.equal(library.books);
+        }), library);
     });
-
 });

@@ -1,5 +1,3 @@
-"use strict";
-
 const fs = require("fs");
 const sysPath = require("path");
 
@@ -109,7 +107,7 @@ const applyPatch = (dmp, file, cwd, patch, done) => {
 };
 
 const patchFromBuffer = (dmp, tokenizer, q, cwd, patchfile, options, buffer, len, eof) => {
-    let match, file, left, right, lines1, lines2, lf, diff, start, end, tmp, lastEnd, i, j;
+    let match, file, left, right, lines1, lines2, lf, start, end, tmp, lastEnd, i, j;
 
     let lastIndex = -1;
 
@@ -247,7 +245,7 @@ waterfall([
 
     (performed, next) => {
         if (!performed) {
-            next(null, performed)
+            next(null, performed);
             return;
         }
 
@@ -261,7 +259,7 @@ waterfall([
 
     (performed, next) => {
         if (!performed) {
-            next()
+            next();
             return;
         }
 
