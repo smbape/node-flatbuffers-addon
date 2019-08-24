@@ -23,12 +23,6 @@ otherwise, it will be treated as the schema file path.
 The schema contents.
 If the `schema_contents` is a schema binary, the `schema` file path must end with `.bfbs`.
 
-### options.schema_length
-
-`type: int`
-
-schema contents length to parse.
-
 ### options.schema_binary
 
 `type: bool`
@@ -182,12 +176,6 @@ otherwise, it will be treated as the schema file path.
 The schema contents.
 If the `schema_contents` is a schema binary, the `schema` file path must end with `.bfbs`.
 
-### options.schema_length
-
-`type: int`
-
-schema contents length to parse.
-
 ### options.include_directories
 
 `type: [String]`
@@ -249,8 +237,6 @@ Generate not just code for the current schema files, but for all files it includ
 If the language uses a single file for output (by default the case for C++ and JS), all code will end up in this one file.
 
 ### options.skip\_js_exports
-
-**NOT TESTED**
 
 `type: bool`
 `default: false`

@@ -1,348 +1,436 @@
-// http://www.puritys.me/docs-blog/article-286-How-to-pass-the-paramater-of-Node.js-or-io.js-into-native-C/C++-function..html
-// https://community.risingstack.com/using-buffers-node-js-c-plus-plus/
-// https://github.com/bodokaiser/node-addons
-
-#include <nan.h>
+#include <node_api.h>
+#include <assert.h>
 
 #include "flatbuffers/flatbuffers.h"
 #include "flatbuffers/idl.h"
 
-namespace NODE_GYP_MODULE_NAME {
+#define ASSERT_DECL_BUFFER_OPT(name, buffer, buffer_len)    \
+    status = napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &key); \
+    assert(status == napi_ok);                              \
+                                                            \
+    status = napi_get_property(env, options, key, &value);  \
+    assert(status == napi_ok);                              \
+                                                            \
+    status = napi_is_buffer(env, value, &is_buffer);        \
+    assert(status == napi_ok);                              \
+                                                            \
+    if (!is_buffer) {                                       \
+        napi_throw_type_error(env, nullptr, name " option must be a buffer"); \
+        return nullptr;                                     \
+    }                                                       \
+                                                            \
+    char *buffer;                                           \
+    size_t buffer_len;                                      \
+    napi_get_buffer_info(env, value, reinterpret_cast<void **>(&buffer), &buffer_len); \
+    assert(status == napi_ok)
 
-#define INIT_OPT_VARIABLES \
-    v8::Local<v8::String> opt;\
-    v8::Local<v8::Value> value;\
-    v8::Local<v8::Array> array;\
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();\
-    v8::EscapableHandleScope scope(isolate);\
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+#define ASSERT_DECL_BUFFER_STRING_OPT(name, identifier, null_terminated) \
+    ASSERT_DECL_BUFFER_OPT(name, identifier##_buffer, identifier##_len); \
+    std::string identifier(identifier##_buffer, null_terminated ? identifier##_len - 1 : identifier##_len);
 
-#define ASSERT_GET_STRING_OPT(options, opt, name, identifier)   \
-    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
-    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        Nan::ThrowTypeError(name " option is required");             \
-        return;                                                 \
-    }                                                           \
-                                                                \
-    value = Nan::Get(options, opt).ToLocalChecked();            \
-    if (!value->IsString()) {                                   \
-        Nan::ThrowTypeError(name " option must be a string");        \
-        return;                                                 \
-    }                                                           \
-    Nan::Utf8String identifier(value)
+#define SET_STRING_OPT(name, identifier)                   \
+    status = napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &key);\
+    assert(status == napi_ok);                              \
+                                                            \
+    status = napi_has_property(env, options, key, &has_prop); \
+    assert(status == napi_ok);                              \
+                                                            \
+    if (has_prop) {                                         \
+        ASSERT_DECL_BUFFER_STRING_OPT(name, identifier, true);    \
+        opts.identifier = identifier;                       \
+    }
 
-#define ASSERT_GET_BUFFER_OPT(options, opt, name, identifier)   \
-    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
-    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        Nan::ThrowTypeError(name " option is required");             \
-        return;                                                 \
-    }                                                           \
-                                                                \
-    value = Nan::Get(options, opt).ToLocalChecked();            \
-    if (!value->IsObject()) {                                   \
-        Nan::ThrowTypeError(name " option must be a buffer");        \
-        return;                                                 \
-    }                                                           \
-    char* identifier = (char*) node::Buffer::Data(value)
+#define ASSERT_ASSIGN_BOOLEAN_OPT(name, identifier)           \
+    status = napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &key); \
+    assert(status == napi_ok);                              \
+                                                            \
+    status = napi_get_property(env, options, key, &value);  \
+    assert(status == napi_ok);                              \
+                                                            \
+    status = napi_typeof(env, value, &valuetype);           \
+    assert(status == napi_ok);                              \
+                                                            \
+    if (valuetype != napi_boolean) {                        \
+        napi_throw_type_error(env, nullptr, name " option must be a boolean");\
+        return nullptr;                                     \
+    }                                                       \
+                                                            \
+    status = napi_get_value_bool(env, value, &identifier);  \
+    assert(status == napi_ok)
 
-#define ASSERT_GET_UINT32_OPT(options, opt, name, identifier)   \
-    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
-    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        Nan::ThrowTypeError(name " option is required");             \
-        return;                                                 \
-    }                                                           \
-                                                                \
-    value = Nan::Get(options, opt).ToLocalChecked();            \
-    if (!value->IsUint32()) {                                   \
-        Nan::ThrowTypeError(name " option must be a positive integer");\
-        return;                                                 \
-    }                                                           \
-    unsigned int identifier = value->ToUint32(context).ToLocalChecked()->Value()
+#define ASSERT_DECL_BOOLEAN_OPT(name, identifier) \
+    bool identifier;                                \
+    ASSERT_ASSIGN_BOOLEAN_OPT(name, identifier)
 
-#define ASSERT_GET_STRING_ARRAY_OPT(options, opt, name, identifier)\
-    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
-    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        Nan::ThrowTypeError(name " option is required");             \
-        return;                                                 \
-    }                                                           \
-                                                                \
-    value = Nan::Get(options, opt).ToLocalChecked();            \
-    if (!value->IsArray()) {                                    \
-        Nan::ThrowTypeError(name " option must be an array");        \
-        return;                                                 \
-    }                                                           \
-    array = v8::Local<v8::Array>::Cast(value);                          \
-                                                                \
-    std::vector<const char *> identifier;                       \
-    for (unsigned int i = 0, len = array->Length(); i < len; i++) { \
-        value = scope.Escape(array->Get(context, i).FromMaybe(v8::Local<v8::Value>())); \
-        if (!value->IsObject()) {                               \
-            std::stringstream err;                              \
+#define SET_BOOLEAN_OPT(name, identifier)                   \
+    status = napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &key);\
+    assert(status == napi_ok);                              \
+                                                            \
+    status = napi_has_property(env, options, key, &has_prop); \
+    assert(status == napi_ok);                              \
+                                                            \
+    if (has_prop) {                                         \
+        ASSERT_DECL_BOOLEAN_OPT(name, identifier);          \
+        opts.identifier = identifier;                       \
+    }
+
+#define ASSERT_ASSIGN_BUFFER_ARRAY(name, identifier)         \
+    status = napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &key);\
+    assert(status == napi_ok);                                          \
+                                                                        \
+    status = napi_get_property(env, options, key, &value);              \
+    assert(status == napi_ok);                                          \
+                                                                        \
+    status = napi_is_array(env, value, &is_array);                      \
+    assert(status == napi_ok);                                          \
+                                                                        \
+    if (!is_array) {                                                    \
+        napi_throw_type_error(env, nullptr, name " option must be an Array"); \
+        return nullptr;                                                 \
+    }                                                                   \
+                                                                        \
+    napi_get_array_length(env, value, &array_len);                      \
+    assert(status == napi_ok);                                          \
+                                                                        \
+    char *identifier##_buffer;                                          \
+    size_t identifier##_buffer_len;                                     \
+    for (uint32_t i = 0; i < array_len; i++) {                          \
+        napi_get_element(env, value, i, &key);                          \
+        status = napi_is_buffer(env, key, &is_buffer);                  \
+        assert(status == napi_ok);                                      \
+                                                                        \
+        if (!is_buffer) {                                               \
+            std::stringstream err;                                      \
             err << "element " << (i + 1) << " of " << name << " must be a buffer"; \
-            Nan::ThrowTypeError(err.str().c_str());                  \
-            return;                                             \
-        }                                                       \
-        identifier.push_back((char*) node::Buffer::Data(value));\
+            napi_throw_type_error(env, nullptr, err.str().c_str());     \
+            return nullptr;                                             \
+        }                                                               \
+                                                                        \
+        napi_get_buffer_info(env, key, reinterpret_cast<void **>(&identifier##_buffer), &identifier##_buffer_len); \
+        assert(status == napi_ok);                                      \
+        identifier.push_back(identifier##_buffer);        \
     }
 
-#define ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier)  \
-    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
-    if (!Nan::HasOwnProperty(options, opt).FromJust()) {        \
-        Nan::ThrowTypeError(name " option is required");             \
-        return;                                                 \
-    }                                                           \
-                                                                \
-    value = Nan::Get(options, opt).ToLocalChecked();            \
-    if (!value->IsBoolean()) {                                  \
-        Nan::ThrowTypeError(name " option must be a boolean");       \
-        return;                                                 \
-    }                                                           \
-    bool identifier = value->ToBoolean(context).ToLocalChecked()->Value()
+#define ASSERT_DECL_BUFFER_ARRAY(name, identifier)  \
+    std::vector<const char *> identifier;           \
+    ASSERT_ASSIGN_BUFFER_ARRAY(name, identifier);
 
-#define SET_BOOLEAN_OPT(options, opt, opts, name, identifier)   \
-    opt = v8::Local<v8::String>(Nan::New(name).ToLocalChecked());    \
-    if (Nan::HasOwnProperty(options, opt).FromJust()) {                                    \
-        ASSERT_GET_BOOLEAN_OPT(options, opt, name, identifier); \
-        opts.identifier = identifier;                           \
-    }
+static bool ParseFile(
+    flatbuffers::Parser &parser,
+    const std::string &filename,
+    const char *contents,
+    const size_t size,
+    std::vector<const char *> &include_directories
+) {
 
-static bool ParseFile(flatbuffers::Parser &parser, const std::string &filename, const char *contents, const size_t size, std::vector<const char *> &include_directories) {
- 
-    if (flatbuffers::GetExtension(filename) == reflection::SchemaExtension()) {
+    if (reflection::SchemaExtension() == flatbuffers::GetExtension(filename)) {
         return parser.Deserialize(reinterpret_cast<const uint8_t *>(contents), size);
     }
 
     auto local_include_directory = flatbuffers::StripFileName(filename);
     include_directories.push_back(local_include_directory.c_str());
     include_directories.push_back(nullptr);
-    if (!parser.Parse(contents, &include_directories[0], filename.c_str())) {
-        return false;
-    }
+    bool ret = parser.Parse(contents, &include_directories[0], filename.c_str());
     include_directories.pop_back();
     include_directories.pop_back();
-    return true;
+    return ret;
 }
 
-static void GenerateBinary_(
-    Nan::NAN_METHOD_ARGS_TYPE &info,
+struct PreparedState {
+    napi_status status;
+    PreparedState(std::nullptr_t) : status(napi_invalid_arg) {};
+    PreparedState() : status(napi_ok) {}
+};
+
+static PreparedState prepareParser(
+    const napi_env &env,
+    const napi_value &options,
     flatbuffers::Parser &parser,
-    flatbuffers::Parser &conform_parser,
-    std::vector<const char *> &include_directories,
-    v8::Local<v8::Object> &options
+    std::vector<const char *> &schema_include_directories
 ) {
-    INIT_OPT_VARIABLES
-    bool schema_binary = false;
+    napi_status status;
+    napi_value key;
+    napi_value value;
+    bool is_buffer;
+    bool is_array;
+    bool has_prop;
+    uint32_t array_len;
 
-    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("conform").ToLocalChecked())).FromJust()) {
-        ASSERT_GET_STRING_OPT(options, opt, "conform", conform);
+    ASSERT_DECL_BUFFER_STRING_OPT("schema", schema, true);
+    ASSERT_DECL_BUFFER_STRING_OPT("schema_contents", schema_contents, false);
+    ASSERT_ASSIGN_BUFFER_ARRAY("include_directories", schema_include_directories);
 
-        if (!std::string(*conform).empty()) {
-            ASSERT_GET_BUFFER_OPT(options, opt, "conform_contents", conform_contents);
-            ASSERT_GET_UINT32_OPT(options, opt, "conform_length", conform_length);
-            ASSERT_GET_STRING_ARRAY_OPT(options, opt, "conform_include_directories", conform_include_directories);
+    parser.SetContentLength(true, schema_contents_len);
 
-            conform_parser.SetContentLength(true, conform_length);
-            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_length, conform_include_directories);
+    if (!ParseFile(parser, schema, schema_contents.c_str(), schema_contents.length(), schema_include_directories)) {
+        auto err = parser.error_.c_str();
+        parser.builder_.Reset();
+        napi_throw_type_error(env, nullptr, err);
+        return nullptr;
+    }
+
+    status = napi_create_string_utf8(env, "conform", NAPI_AUTO_LENGTH, &key);
+    assert(status == napi_ok);
+
+    status = napi_has_property(env, options, key, &has_prop);
+    assert(status == napi_ok);
+
+    if (has_prop) {
+        ASSERT_DECL_BUFFER_STRING_OPT("conform", conform, true);
+        ASSERT_DECL_BUFFER_STRING_OPT("conform_contents", conform_contents, false);
+        if (!conform_contents.empty()) {
+            ASSERT_DECL_BUFFER_ARRAY("conform_include_directories", conform_include_directories);
+
+            flatbuffers::Parser conform_parser;
+            conform_parser.SetContentLength(true, conform_contents_len);
+            if (!ParseFile(conform_parser, conform, conform_contents.c_str(), conform_contents.length(), conform_include_directories)) {
+                auto err = conform_parser.error_.c_str();
+                conform_parser.builder_.Reset();
+                napi_throw_type_error(env, nullptr, err);
+                return nullptr;
+            }
+
             auto err = parser.ConformTo(conform_parser);
+            conform_parser.builder_.Reset();
             if (!err.empty()) {
                 std::stringstream errss;
                 errss << "schemas don\'t conform: " << err;
-                Nan::ThrowTypeError(errss.str().c_str());
-                return;
+                napi_throw_type_error(env, nullptr, errss.str().c_str());
+                return nullptr;
             }
         }
     }
 
-    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("schema_binary").ToLocalChecked())).FromJust()) {
-        ASSERT_GET_BOOLEAN_OPT(options, opt, "schema_binary", schema_binary_);
-        schema_binary = schema_binary_;
-    }
-
-    if (schema_binary) {
-        parser.Serialize();
-        parser.file_extension_ = reflection::SchemaExtension();
-    } else {
-        ASSERT_GET_STRING_OPT(options, opt, "json", json);
-        ASSERT_GET_BUFFER_OPT(options, opt, "json_contents", json_contents);
-        ASSERT_GET_UINT32_OPT(options, opt, "json_length", json_length);
-
-        parser.SetContentLength(true, json_length);
-        if (!ParseFile(parser, std::string(*json), json_contents, json_length, include_directories)) {
-            Nan::ThrowTypeError(parser.error_.c_str());
-            return;
-        }
-    }
-
-    v8::Local<v8::Object> ret;
-
-    if (parser.builder_.GetSize() == 0) {
-        ret = Nan::NewBuffer(0).ToLocalChecked();
-    } else {
-        char *buffer = reinterpret_cast<char *>(parser.builder_.GetBufferPointer());
-        size_t len = parser.builder_.GetSize();
-        ret = Nan::CopyBuffer(buffer, len).ToLocalChecked(); // Make v8 allocator handle gc when needed
-    }
-
-    info.GetReturnValue().Set(ret);
+    return PreparedState();
 }
 
-NAN_METHOD(GenerateBinary) {
-    if (!info[0]->IsObject()) {
-        Nan::ThrowTypeError("First argument should be an v8::Object.");
-        return;
+napi_value GenerateBinary(napi_env env, napi_callback_info info) {
+    napi_status status;
+
+    size_t argc = 1;
+    napi_value args[1];
+    status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    assert(status == napi_ok);
+
+    if (argc < 1) {
+        napi_throw_type_error(env, nullptr, "Wrong number of arguments");
+        return nullptr;
     }
 
-    INIT_OPT_VARIABLES
+    napi_valuetype valuetype;
+    status = napi_typeof(env, args[0], &valuetype);
+    assert(status == napi_ok);
+
+    if (valuetype != napi_object) {
+        napi_throw_type_error(env, nullptr, "Wrong arguments");
+        return nullptr;
+    }
+
+    napi_value options;
+    status = napi_coerce_to_object(env, args[0], &options);
+    assert(status == napi_ok);
+
+    napi_value key;
+    napi_value value;
+    bool is_buffer;
+    // bool is_array;
+    bool has_prop;
+
     flatbuffers::IDLOptions opts;
     opts.lang = flatbuffers::IDLOptions::kBinary;
 
-    v8::Local<v8::Object> options = Nan::To<v8::Object>(info[0]).ToLocalChecked();
-
-    SET_BOOLEAN_OPT(options, opt, opts, "strict_json", strict_json);
-    SET_BOOLEAN_OPT(options, opt, opts, "ignore_null_scalar", ignore_null_scalar);
-    SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
-    SET_BOOLEAN_OPT(options, opt, opts, "skip_unexpected_fields_in_json", skip_unexpected_fields_in_json);
-    SET_BOOLEAN_OPT(options, opt, opts, "size_prefixed", size_prefixed);
-    SET_BOOLEAN_OPT(options, opt, opts, "proto_mode", proto_mode);
-    SET_BOOLEAN_OPT(options, opt, opts, "proto_oneof_union", proto_oneof_union);
-    SET_BOOLEAN_OPT(options, opt, opts, "binary_schema_comments", binary_schema_comments);
-    SET_BOOLEAN_OPT(options, opt, opts, "binary_schema_builtins", binary_schema_builtins);
-    SET_BOOLEAN_OPT(options, opt, opts, "force_defaults", force_defaults);
+    SET_BOOLEAN_OPT("strict_json", strict_json);
+    SET_BOOLEAN_OPT("ignore_null_scalar", ignore_null_scalar);
+    SET_BOOLEAN_OPT("allow_non_utf8", allow_non_utf8);
+    SET_BOOLEAN_OPT("skip_unexpected_fields_in_json", skip_unexpected_fields_in_json);
+    SET_BOOLEAN_OPT("size_prefixed", size_prefixed);
+    SET_BOOLEAN_OPT("proto_mode", proto_mode);
+    SET_BOOLEAN_OPT("proto_oneof_union", proto_oneof_union);
+    SET_BOOLEAN_OPT("binary_schema_comments", binary_schema_comments);
+    SET_BOOLEAN_OPT("binary_schema_builtins", binary_schema_builtins);
+    SET_BOOLEAN_OPT("force_defaults", force_defaults);
 
     // Not documented in flatbuffers
-    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
+    SET_BOOLEAN_OPT("union_value_namespacing", union_value_namespacing);
 
     std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
+    std::vector<const char *> schema_include_directories;
+    PreparedState state = prepareParser(env, options, *parser.get(), schema_include_directories);
 
-    ASSERT_GET_STRING_OPT(options, opt, "schema", schema);
-    ASSERT_GET_BUFFER_OPT(options, opt, "schema_contents", schema_contents);
-    ASSERT_GET_UINT32_OPT(options, opt, "schema_length", schema_length);
-
-    ASSERT_GET_STRING_ARRAY_OPT(options, opt, "include_directories", include_directories);
-
-    parser->SetContentLength(true, schema_length);
-    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, schema_length, include_directories)) {
+    if (state.status != napi_ok) {
         parser->builder_.Reset();
-        Nan::ThrowTypeError(parser->error_.c_str());
-        return;
+        return nullptr;
     }
 
-    flatbuffers::Parser conform_parser;
-    GenerateBinary_(info, *parser.get(), conform_parser, include_directories, options);
-    parser->builder_.Reset();
-    conform_parser.builder_.Reset();
-}
+    parser->MarkGenerated();
 
-static void GenerateJS_(
-    Nan::NAN_METHOD_ARGS_TYPE &info,
-    flatbuffers::Parser &parser,
-    flatbuffers::Parser &conform_parser,
-    v8::Local<v8::Object> &options
-) {
-    INIT_OPT_VARIABLES
-    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("conform").ToLocalChecked())).FromJust()) {
-        ASSERT_GET_STRING_OPT(options, opt, "conform", conform);
+    bool schema_binary = false;
 
-        if (!std::string(*conform).empty()) {
-            ASSERT_GET_BUFFER_OPT(options, opt, "conform_contents", conform_contents);
-            ASSERT_GET_UINT32_OPT(options, opt, "conform_length", conform_length);
-            ASSERT_GET_STRING_ARRAY_OPT(options, opt, "conform_include_directories", conform_include_directories);
+    status = napi_create_string_utf8(env, "schema_binary", NAPI_AUTO_LENGTH, &key);
+    assert(status == napi_ok);
 
-            conform_parser.SetContentLength(true, conform_length);
-            ParseFile(conform_parser, std::string(*conform), conform_contents, conform_length, conform_include_directories);
-            auto err = parser.ConformTo(conform_parser);
-            if (!err.empty()) {
-                std::stringstream errss;
-                errss << "schemas don\'t conform: " << err;
-                Nan::ThrowTypeError(errss.str().c_str());
-                return;
-            }
+    status = napi_has_property(env, options, key, &has_prop);
+    assert(status == napi_ok);
+
+    if (has_prop) {
+        ASSERT_ASSIGN_BOOLEAN_OPT("schema_binary", schema_binary);
+    }
+
+    if (schema_binary) {
+        parser->Serialize();
+        parser->file_extension_ = reflection::SchemaExtension();
+    } else {
+        ASSERT_DECL_BUFFER_STRING_OPT("json", json, true);
+        ASSERT_DECL_BUFFER_STRING_OPT("json_contents", json_contents, false);
+
+        parser->SetContentLength(true, json_contents_len);
+        if (!ParseFile(*parser.get(), json, json_contents.c_str(), json_contents.length(), schema_include_directories)) {
+            auto err = parser->error_.c_str();
+            parser->builder_.Reset();
+            napi_throw_type_error(env, nullptr, err);
+            return nullptr;
         }
     }
 
-    std::string code = flatbuffers::GenerateJSTSCode(parser);
-    info.GetReturnValue().Set(Nan::New(code.c_str()).ToLocalChecked());
-}
-
-NAN_METHOD(GenerateJS) {
-    if (!info[0]->IsObject()) {
-        Nan::ThrowTypeError("First argument should be an v8::Object.");
-        return;
+    size_t len = parser->builder_.GetSize();
+    if (len == 0) {
+        parser->builder_.Reset();
+        napi_throw_type_error(env, nullptr, "input file is neither json nor a .fbs (schema) file");
+        return nullptr;
     }
 
-    INIT_OPT_VARIABLES
+    char *buffer = reinterpret_cast<char *>(parser->builder_.GetBufferPointer());
+
+    napi_value res;
+    status = napi_create_buffer_copy(env, len, buffer, NULL, &res);
+    assert(status == napi_ok);
+
+    parser->builder_.Reset();
+
+    return res;
+}
+
+napi_value GenerateJS(napi_env env, napi_callback_info info) {
+    napi_status status;
+
+    size_t argc = 1;
+    napi_value args[1];
+    status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    assert(status == napi_ok);
+
+    if (argc < 1) {
+        napi_throw_type_error(env, nullptr, "Wrong number of arguments");
+        return nullptr;
+    }
+
+    napi_valuetype valuetype;
+    status = napi_typeof(env, args[0], &valuetype);
+    assert(status == napi_ok);
+
+    if (valuetype != napi_object) {
+        napi_throw_type_error(env, nullptr, "Wrong arguments");
+        return nullptr;
+    }
+
+    napi_value options;
+    status = napi_coerce_to_object(env, args[0], &options);
+    assert(status == napi_ok);
+
+    napi_value key;
+    napi_value value;
+    bool is_buffer;
+    // bool is_array;
+    bool has_prop;
+
     flatbuffers::IDLOptions opts;
-    v8::Local<v8::Object> options = Nan::To<v8::Object>(info[0]).ToLocalChecked();
+
+    SET_BOOLEAN_OPT("allow_non_utf8", allow_non_utf8);
+    SET_BOOLEAN_OPT("mutable_buffer", mutable_buffer);
+    SET_BOOLEAN_OPT("generate_all", generate_all);
+    SET_BOOLEAN_OPT("skip_js_exports", skip_js_exports);
+    SET_BOOLEAN_OPT("use_goog_js_export_format", use_goog_js_export_format);
+    SET_BOOLEAN_OPT("use_ES6_js_export_format", use_ES6_js_export_format);
+    SET_BOOLEAN_OPT("size_prefixed", size_prefixed);
+    SET_BOOLEAN_OPT("proto_mode", proto_mode);
+    SET_BOOLEAN_OPT("proto_oneof_union", proto_oneof_union);
+    SET_BOOLEAN_OPT("keep_include_path", keep_include_path);
+    SET_BOOLEAN_OPT("skip_flatbuffers_import", skip_flatbuffers_import);
+    SET_BOOLEAN_OPT("reexport_ts_modules", reexport_ts_modules);
+    SET_BOOLEAN_OPT("js_ts_short_names", js_ts_short_names);
+    SET_BOOLEAN_OPT("union_value_namespacing", union_value_namespacing);
+
+    // Not documented in flatbuffers
+    SET_BOOLEAN_OPT("union_value_namespacing", union_value_namespacing);
+
+    SET_STRING_OPT("include_prefix", include_prefix);
+    if (!opts.include_prefix.empty()) {
+        opts.include_prefix = flatbuffers::ConCatPathFileName(flatbuffers::PosixPath(opts.include_prefix.c_str()), "");
+    }
 
     opts.lang = flatbuffers::IDLOptions::kJs;
 
-    if (Nan::HasOwnProperty(options, v8::Local<v8::String>(Nan::New("type").ToLocalChecked())).FromJust()) {
-        ASSERT_GET_STRING_OPT(options, opt, "type", type);
-        if (std::string(*type) == "ts") {
+    status = napi_create_string_utf8(env, "type", NAPI_AUTO_LENGTH, &key);
+    assert(status == napi_ok);
+
+    status = napi_has_property(env, options, key, &has_prop);
+    assert(status == napi_ok);
+
+    if (has_prop) {
+        status = napi_get_property(env, options, key, &value);
+        assert(status == napi_ok);
+
+        status = napi_typeof(env, value, &valuetype);
+        assert(status == napi_ok);
+
+        if (valuetype != napi_string) {
+            napi_throw_type_error(env, nullptr, "type" " option must be a string");
+            return nullptr;
+        }
+
+        char buffer[3];
+        size_t buffer_size = 3;
+        size_t copied;
+
+        status = napi_get_value_string_utf8(env, value, buffer, buffer_size, &copied);
+        assert(status == napi_ok);
+
+        if (std::string(buffer, copied) == "ts") {
             opts.lang = flatbuffers::IDLOptions::kTs;
         }
     }
 
-    SET_BOOLEAN_OPT(options, opt, opts, "allow_non_utf8", allow_non_utf8);
-    SET_BOOLEAN_OPT(options, opt, opts, "mutable_buffer", mutable_buffer);
-    SET_BOOLEAN_OPT(options, opt, opts, "generate_all", generate_all);
-    SET_BOOLEAN_OPT(options, opt, opts, "skip_js_exports", skip_js_exports);
-    SET_BOOLEAN_OPT(options, opt, opts, "use_goog_js_export_format", use_goog_js_export_format);
-    SET_BOOLEAN_OPT(options, opt, opts, "use_ES6_js_export_format", use_ES6_js_export_format);
-    SET_BOOLEAN_OPT(options, opt, opts, "size_prefixed", size_prefixed);
-    SET_BOOLEAN_OPT(options, opt, opts, "proto_mode", proto_mode);
-    SET_BOOLEAN_OPT(options, opt, opts, "proto_oneof_union", proto_oneof_union);
-    SET_BOOLEAN_OPT(options, opt, opts, "keep_include_path", keep_include_path);
-    SET_BOOLEAN_OPT(options, opt, opts, "skip_flatbuffers_import", skip_flatbuffers_import);
-    SET_BOOLEAN_OPT(options, opt, opts, "reexport_ts_modules", reexport_ts_modules);
-    SET_BOOLEAN_OPT(options, opt, opts, "js_ts_short_names", js_ts_short_names);
-
-    opt = v8::Local<v8::String>(Nan::New("include_prefix").ToLocalChecked());
-    if (Nan::HasOwnProperty(options, opt).FromJust()) {
-        value = Nan::Get(options, opt).ToLocalChecked();
-        if (!value->IsObject()) {
-            Nan::ThrowTypeError("include_prefix" " option must be a buffer");
-            return;
-        }
-        opts.include_prefix = flatbuffers::ConCatPathFileName(flatbuffers::PosixPath((char*) node::Buffer::Data(value)), "");
-    }
-
-    SET_BOOLEAN_OPT(options, opt, opts, "union_value_namespacing", union_value_namespacing);
-
     std::unique_ptr<flatbuffers::Parser> parser(new flatbuffers::Parser(opts));
-
-    ASSERT_GET_STRING_OPT(options, opt, "schema", schema);
-    ASSERT_GET_BUFFER_OPT(options, opt, "schema_contents", schema_contents);
-    ASSERT_GET_UINT32_OPT(options, opt, "schema_length", schema_length);
-
-    ASSERT_GET_STRING_ARRAY_OPT(options, opt, "include_directories", include_directories);
-
-    parser->SetContentLength(true, schema_length);
-    if (!ParseFile(*parser.get(), std::string(*schema), schema_contents, schema_length, include_directories)) {
-        Nan::ThrowTypeError(parser->error_.c_str());
-        return;
+    std::vector<const char *> schema_include_directories;
+    PreparedState state = prepareParser(env, options, *parser.get(), schema_include_directories);
+    if (state.status != napi_ok) {
+        parser->builder_.Reset();
+        return nullptr;
     }
 
-    flatbuffers::Parser conform_parser;
-    GenerateJS_(info, *parser.get(), conform_parser, options);
+    std::string code = flatbuffers::GenerateJSTSCode(*parser.get());
+
+    napi_value res;
+    status = napi_create_string_utf8(env, code.c_str(), code.length(), &res);
+    assert(status == napi_ok);
+
     parser->builder_.Reset();
-    conform_parser.builder_.Reset();
+
+    return res;
 }
 
-NAN_MODULE_INIT(Init) {
-    v8::Local<v8::Context> context = Nan::GetCurrentContext();
+#define DECLARE_NAPI_METHOD(name, func) { name, 0, func, 0, 0, 0, napi_default, 0 }
 
-    Nan::Set(target,
-        Nan::New("binary").ToLocalChecked(),
-        Nan::New<v8::FunctionTemplate>(GenerateBinary)->GetFunction(context).ToLocalChecked()
-    );
+napi_value Init(napi_env env, napi_value exports) {
+    napi_status status;
 
-    Nan::Set(target,
-        Nan::New("js").ToLocalChecked(),
-        Nan::New<v8::FunctionTemplate>(GenerateJS)->GetFunction(context).ToLocalChecked()
-    );
+    napi_property_descriptor desc[] = {
+        DECLARE_NAPI_METHOD("binary", GenerateBinary),
+        DECLARE_NAPI_METHOD("js", GenerateJS),
+    };
+    status = napi_define_properties(env, exports, sizeof(desc) / sizeof(*desc), desc);
+
+    assert(status == napi_ok);
+    return exports;
 }
 
-NODE_MODULE(NODE_GYP_MODULE_NAME, Init)
-
-}
+NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)

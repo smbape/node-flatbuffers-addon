@@ -1,11 +1,25 @@
 const addon = require("bindings")("addon.node");
 
-const StringBuffer = str => {
-    const len = Buffer.byteLength(str, "utf8");
-    const buffer = Buffer.allocUnsafe(len + 1);
-    buffer.write(str, "utf8");
-    buffer[len] = 0;
-    return buffer;
+const hasProp = Object.prototype.hasOwnProperty;
+
+const c_str = (str, null_terminated) => {
+    if (typeof str === "string") {
+        const byteLength = Buffer.byteLength(str, "utf8");
+        const buf = Buffer.allocUnsafe(byteLength + 1);
+        buf.write(str, "utf8");
+        buf[byteLength] = 0;
+        return buf;
+    }
+
+    if (null_terminated && Buffer.isBuffer(str) && str[str.length - 1] !== 0) {
+        const byteLength = str.length;
+        const buf = Buffer.allocUnsafe(byteLength + 1);
+        str.copy(buf, 0, 0, byteLength);
+        buf[byteLength] = 0;
+        return buf;
+    }
+
+    return str;
 };
 
 const setOption = (options, prop, basename, ext, stringify) => {
@@ -23,23 +37,25 @@ const setOption = (options, prop, basename, ext, stringify) => {
     }
 
     if (typeof options[`${ prop }_contents`] === "string") {
-        options[`${ prop }_contents`] = StringBuffer(options[`${ prop }_contents`]);
+        options[`${ prop }_contents`] = c_str(options[`${ prop }_contents`]);
     }
 
-    if (options[`${ prop }_contents`] != null && !Buffer.isBuffer(options[`${ prop }_contents`])) {
-        throw new TypeError(`${ prop }_contents must be a string or a Buffer`);
-    }
+    if (options[`${ prop }_contents`] != null) {
+        if (!Buffer.isBuffer(options[`${ prop }_contents`])) {
+            throw new TypeError(`${ prop }_contents must be a string or a Buffer`);
+        }
 
-    if (options[`${ prop }_length`] == null && options[`${ prop }_contents`]) {
-        options[`${ prop }_length`] = options[`${ prop }_contents`].length;
-    }
-
-    if (options[`${ prop }_contents`] != null && Buffer.isBuffer(options[prop])) {
-        throw new TypeError(`if ${ prop } is a Buffer, ${ prop }_contents must be null or undefined`);
+        if (Buffer.isBuffer(options[prop])) {
+            throw new TypeError(`if ${ prop } is a Buffer, ${ prop }_contents must be null or undefined`);
+        }
     }
 
     if (options[prop] != null && typeof options[prop] !== "string") {
         throw new TypeError(`${ prop } must be a string`);
+    }
+
+    if (options[prop] != null) {
+        options[prop] = c_str(options[prop], true);
     }
 };
 
@@ -59,18 +75,19 @@ const schemaOptions = options => {
 
         if (Array.isArray(options[prop])) {
             options[prop].forEach((item, i, arr) => {
-                if (typeof item === "string") {
-                    arr[i] = StringBuffer(item);
-                } else if (!Buffer.isBuffer(item)) {
+                arr[i] = c_str(item, true);
+                if (!Buffer.isBuffer(arr[i])) {
                     throw new TypeError(`element ${ i } of ${ prop } must be a string or a Buffer`);
                 }
             });
         }
     });
 
-    if (typeof options.include_prefix === "string") {
-        options.include_prefix = StringBuffer(options.include_prefix);
-    }
+    [ "include_prefix", "js_ts_global_prefix" ].forEach(prop => {
+        if (options[prop] != null) {
+            options[prop] = c_str(options[prop], true);
+        }
+    });
 
     return options;
 };

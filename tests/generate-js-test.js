@@ -92,15 +92,9 @@ const pick = (obj, props) => {
     return ret;
 };
 
-const testFlatbuffers = (js, binary, expected, test) => {
-    const sandbox = {};
-    (new Function(js)).call(sandbox); // eslint-disable-line no-new-func
-    const nsp = sandbox.some.nested.namespace;
-    plainAccessor(nsp);
-
-    const bytes = new Uint8Array(binary);
+const testLibrary = (Library, bytes, expected, test) => {
     const buf = new flatbuffers.ByteBuffer(bytes);
-    const actual = pick(nsp.Library.getRootAsLibrary(buf), ["name", "books", "cdate"]);
+    const actual = pick(Library.getRootAsLibrary(buf), ["name", "books", "cdate"]);
 
     for (let i = 0, len = actual.books.length; i < len; i++) {
         actual.books[i] = pick(actual.books[i], ["id", "title", "authors", "release", "genres", "rank"]);
@@ -112,6 +106,14 @@ const testFlatbuffers = (js, binary, expected, test) => {
 
     expect(actual.name).to.equal(expected.name);
     expect(actual.books).to.deep.equal(expected.books);
+};
+
+const testFlatbuffers = (js, bytes, expected, test) => {
+    const sandbox = {};
+    (new Function(js)).call(sandbox); // eslint-disable-line no-new-func
+    const nsp = sandbox.some.nested.namespace;
+    plainAccessor(nsp);
+    testLibrary(nsp.Library, bytes, expected, test);
 };
 
 const DEFAULT_SCHEMA = `
@@ -182,7 +184,6 @@ for (let i = 0; i < 4; i++) {
 const DEFAULT_LIBRARY_JSON = JSON.stringify(DEFAULT_LIBRARY);
 const DEFAULT_LIBRARY_JSON_BUFFER = Buffer.from(DEFAULT_LIBRARY_JSON);
 
-
 describe("generate-js", () => {
     it("should generate with {schema, json}", () => {
         testFlatbuffers(addon.js({
@@ -197,6 +198,13 @@ describe("generate-js", () => {
         }), addon.binary({
             schema: DEFAULT_SCHEMA,
             json: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY
         }), DEFAULT_LIBRARY);
     });
 
@@ -213,6 +221,13 @@ describe("generate-js", () => {
         }), addon.binary({
             schema_contents: DEFAULT_SCHEMA,
             json: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY
         }), DEFAULT_LIBRARY);
     });
 
@@ -234,6 +249,15 @@ describe("generate-js", () => {
             schema_contents: DEFAULT_SCHEMA,
             json: DEFAULT_LIBRARY_JSON
         }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY
+        }), DEFAULT_LIBRARY);
     });
 
     it("should generate with {schema, json_contents}", () => {
@@ -250,6 +274,13 @@ describe("generate-js", () => {
             schema: DEFAULT_SCHEMA,
             json_contents: DEFAULT_LIBRARY_JSON
         }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json_contents: DEFAULT_LIBRARY
+        }), DEFAULT_LIBRARY);
     });
 
     it("should generate with {schema_contents, json_contents}", () => {
@@ -265,6 +296,13 @@ describe("generate-js", () => {
         }), addon.binary({
             schema_contents: DEFAULT_SCHEMA,
             json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA,
+            json_contents: DEFAULT_LIBRARY
         }), DEFAULT_LIBRARY);
     });
 
@@ -286,6 +324,15 @@ describe("generate-js", () => {
             schema_contents: DEFAULT_SCHEMA,
             json_contents: DEFAULT_LIBRARY_JSON
         }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA,
+            json_contents: DEFAULT_LIBRARY
+        }), DEFAULT_LIBRARY);
     });
 
     it("should generate with {schema, json, json_contents}", () => {
@@ -304,6 +351,14 @@ describe("generate-js", () => {
             json: "books.json",
             json_contents: DEFAULT_LIBRARY_JSON
         }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY
+        }), DEFAULT_LIBRARY);
     });
 
     it("should generate with {schema_contents, json, json_contents}", () => {
@@ -321,6 +376,14 @@ describe("generate-js", () => {
             schema_contents: DEFAULT_SCHEMA,
             json: "books.json",
             json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema_contents: DEFAULT_SCHEMA,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY
         }), DEFAULT_LIBRARY);
     });
 
@@ -343,6 +406,16 @@ describe("generate-js", () => {
             schema_contents: DEFAULT_SCHEMA,
             json: "books.json",
             json_contents: DEFAULT_LIBRARY_JSON
+        }), DEFAULT_LIBRARY);
+
+        testFlatbuffers(addon.js({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA
+        }), addon.binary({
+            schema: "Library.fbs",
+            schema_contents: DEFAULT_SCHEMA,
+            json: "books.json",
+            json_contents: DEFAULT_LIBRARY
         }), DEFAULT_LIBRARY);
     });
 
@@ -370,7 +443,7 @@ describe("generate-js", () => {
             schema: DEFAULT_SCHEMA.replace("ulong = 1", "ulong = 2")
         }), addon.binary({
             schema: DEFAULT_SCHEMA,
-            json: DEFAULT_LIBRARY_JSON,
+            json: DEFAULT_LIBRARY,
             force_defaults: false
         }), DEFAULT_LIBRARY, (actual, expected) => {
             expect(actual.cdate).to.equal(2);
@@ -380,7 +453,7 @@ describe("generate-js", () => {
             schema: DEFAULT_SCHEMA.replace("ulong = 1", "ulong = 2")
         }), addon.binary({
             schema: DEFAULT_SCHEMA,
-            json: DEFAULT_LIBRARY_JSON,
+            json: DEFAULT_LIBRARY,
             force_defaults: true
         }), DEFAULT_LIBRARY, (actual, expected) => {
             expect(actual.cdate).to.equal(1);
@@ -454,9 +527,9 @@ describe("generate-js", () => {
         }
 
         testFlatbuffers(addon.js({
-            schema: DEFAULT_RANKED_SCHEMA_BUFFER
+            schema: DEFAULT_RANKED_SCHEMA
         }), addon.binary({
-            schema: DEFAULT_RANKED_SCHEMA_BUFFER,
+            schema: DEFAULT_RANKED_SCHEMA,
             json: json_contents,
             ignore_null_scalar: true
         }), library);
@@ -496,12 +569,32 @@ describe("generate-js", () => {
         }).to.throw(TypeError);
 
         testFlatbuffers(addon.js({
-            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            schema: DEFAULT_SCHEMA,
         }), addon.binary({
-            schema_contents: DEFAULT_SCHEMA_BUFFER,
+            schema: DEFAULT_SCHEMA,
             json,
             json_contents,
             skip_unexpected_fields_in_json: true
         }), library);
+    });
+
+    it("should skip_js_exports", () => {
+        const sandbox = {};
+
+         // eslint-disable-next-line no-new-func
+        const nsp = (new Function(addon.js({
+            schema: DEFAULT_SCHEMA_BUFFER,
+            skip_js_exports: true
+        }) + "; return some;")).call(sandbox).nested.namespace;
+        plainAccessor(nsp);
+
+        expect(sandbox.some).to.equal(undefined);
+
+        const binary = addon.binary({
+            schema: DEFAULT_SCHEMA,
+            json: DEFAULT_LIBRARY
+        });
+
+        testLibrary(nsp.Library, binary, DEFAULT_LIBRARY);
     });
 });

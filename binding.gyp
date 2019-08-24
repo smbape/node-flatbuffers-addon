@@ -4,8 +4,7 @@
     "include_dirs" : [
       "src",
       "deps/flatbuffers/include",
-      "deps/flatbuffers/grpc",
-      "<!(node -e \"require('nan')\")"
+      "deps/flatbuffers/grpc"
     ],
     "sources": [
       "deps/flatbuffers/include/flatbuffers/code_generators.h",
@@ -26,11 +25,15 @@
       # "deps/flatbuffers/src/reflection.cpp",
       "deps/flatbuffers/src/util.cpp",
       # "deps/flatbuffers/src/idl_gen_cpp.cpp",
+      # "deps/flatbuffers/src/idl_gen_dart.cpp",
       # "deps/flatbuffers/src/idl_gen_general.cpp",
       # "deps/flatbuffers/src/idl_gen_go.cpp",
       "deps/flatbuffers/src/idl_gen_js_ts.cpp",
       # "deps/flatbuffers/src/idl_gen_php.cpp",
       # "deps/flatbuffers/src/idl_gen_python.cpp",
+      # "deps/flatbuffers/src/idl_gen_lobster.cpp",
+      # "deps/flatbuffers/src/idl_gen_lua.cpp",
+      # "deps/flatbuffers/src/idl_gen_rust.cpp",
       # "deps/flatbuffers/src/idl_gen_fbs.cpp",
       # "deps/flatbuffers/src/idl_gen_grpc.cpp",
       # "deps/flatbuffers/src/idl_gen_json_schema.cpp",
@@ -44,6 +47,34 @@
       # "deps/flatbuffers/grpc/src/compiler/java_generator.h",
       # "deps/flatbuffers/grpc/src/compiler/java_generator.cc",
       "src/index.cpp"
-    ]
+    ],
+
+    # Visual Studio pedantic build settings
+    # warning C4512: assignment operator could not be generated
+    # warning C4316: object allocated on the heap may not be aligned
+    "msvs_disabled_warnings": [4512, 4316],
+
+    "msvs_settings": {
+      "VCCLCompilerTool": {
+        "WarnAsError": "true", # /WX
+        "WarningLevel": 4 # /W4
+      }
+    },
+    "cflags_cc": ["-pedantic", "-Werror", "-Wold-style-cast"],
+    "conditions": [
+      ["OS=='mac'", {
+        "cflags_cc": ["-std=c++11", "-stdlib=libc++"],
+      }, {
+        # Certain platforms such as ARM do not use signed chars by default
+        # which causes issues with certain bounds checks.
+        "cflags_cc": ["-std=c++0x", "-fsigned-char"],
+      }],
+      ["clang==1 and OS!='linux'", {
+        "cflags_cc": ["-stdlib=libc++"],
+      }],
+      ["clang==1 and OS!='linux' and OS!='freebsd'", {
+        "cflags_cc": ["-lc++abi"],
+      }]
+    ],
   }]
 }
