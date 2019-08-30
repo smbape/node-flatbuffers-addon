@@ -1,0 +1,141 @@
+diff --git a/src/embind/embind.js b/src/embind/embind.js
+index ba66240..44ff487 100644
+--- a/src/embind/embind.js
++++ b/src/embind/embind.js
+@@ -627,7 +627,13 @@ var LibraryEmbind = {
+ 
+     registerType(rawType, {
+         name: name,
+-        'fromWireType': function(value) {
++        'fromWireType': ENVIRONMENT_IS_NODE && stdStringIsUTF8 ? function(value) {
++          var decodeStartPtr = value + 4;
++          var length = HEAPU32[value >> 2];
++          var str = HEAPBUFFER.toString("utf8", decodeStartPtr, decodeStartPtr + length);
++          _free(value);
++          return str;
++        } : function(value) {
+             var length = HEAPU32[value >> 2];
+ 
+             var str;
+@@ -1308,6 +1314,12 @@ var LibraryEmbind = {
+             };
+         });
+ 
++        var fieldNames = Object.keys(fields);
++        var fieldValues = fieldNames.map(function(i) {
++            return fields[i];
++        });
++        var fieldsCount = fieldNames.length;
++
+         return [{
+             name: reg.name,
+             'fromWireType': function(ptr) {
+@@ -1319,16 +1331,18 @@ var LibraryEmbind = {
+                 return rv;
+             },
+             'toWireType': function(destructors, o) {
++#if ASSERTIONS
+                 // todo: Here we have an opportunity for -O3 level "unsafe" optimizations:
+                 // assume all fields are present without checking.
+-                for (var fieldName in fields) {
+-                    if (!(fieldName in o)) {
+-                        throw new TypeError('Missing field');
++                for (var i in fields) {
++                    if (!(i in o)) {
++                        throw new TypeError('Missing field ' + i);
+                     }
+                 }
++#endif
+                 var ptr = rawConstructor();
+-                for (fieldName in fields) {
+-                    fields[fieldName].write(ptr, o[fieldName]);
++                for (var i = 0; i < fieldsCount; i++) {
++                    fieldValues[i].write(ptr, o[fieldNames[i]]);
+                 }
+                 if (destructors !== null) {
+                     destructors.push(rawDestructor, ptr);
+diff --git a/src/preamble.js b/src/preamble.js
+index 69291a5..6ab27e6 100644
+--- a/src/preamble.js
++++ b/src/preamble.js
+@@ -280,6 +280,8 @@ function alignUp(x, multiple) {
+ var HEAP,
+ /** @type {ArrayBuffer} */
+   buffer,
++/** @type {Buffer} */
++  HEAPBUFFER,
+ /** @type {Int8Array} */
+   HEAP8,
+ /** @type {Uint8Array} */
+@@ -299,6 +301,9 @@ var HEAP,
+ 
+ function updateGlobalBufferAndViews(buf) {
+   buffer = buf;
++  if (ENVIRONMENT_IS_NODE) {
++    Module["HEAPBUFFER"] = HEAPBUFFER = Buffer.from(buf);
++  }
+   Module['HEAP8'] = HEAP8 = new Int8Array(buf);
+   Module['HEAP16'] = HEAP16 = new Int16Array(buf);
+   Module['HEAP32'] = HEAP32 = new Int32Array(buf);
+diff --git a/src/runtime_strings.js b/src/runtime_strings.js
+index 6c0b613..de235dc 100644
+--- a/src/runtime_strings.js
++++ b/src/runtime_strings.js
+@@ -107,6 +107,41 @@ function UTF8ArrayToString(u8Array, idx, maxBytesToRead) {
+ #endif // TEXTDECODER == 2
+ }
+ 
++if (ENVIRONMENT_IS_NODE) {
++    var isTypedArray = typeof BigInt64Array === "function" ? function(obj) {
++        return (obj instanceof Int8Array) ||
++            (obj instanceof Uint8Array) ||
++            (obj instanceof Uint8ClampedArray) ||
++            (obj instanceof Int16Array) ||
++            (obj instanceof Uint16Array) ||
++            (obj instanceof Int32Array) ||
++            (obj instanceof Uint32Array) ||
++            (obj instanceof Float32Array) ||
++            (obj instanceof Float64Array) ||
++            (obj instanceof BigInt64Array) ||
++            (obj instanceof BigUint64Array);
++    } : function(obj) {
++        return (obj instanceof Int8Array) ||
++            (obj instanceof Uint8Array) ||
++            (obj instanceof Uint8ClampedArray) ||
++            (obj instanceof Int16Array) ||
++            (obj instanceof Uint16Array) ||
++            (obj instanceof Int32Array) ||
++            (obj instanceof Uint32Array) ||
++            (obj instanceof Float32Array) ||
++            (obj instanceof Float64Array);
++    };
++
++    // faster implementation of UTF8ArrayToString for NodeJS
++    // see node-flatbuffers-addon/benchmark/benchmark-UTF8ArrayToString.js
++    function UTF8ArrayToString(u8Array, idx, maxBytesToRead) {
++      var buf = isTypedArray(u8Array) ? u8Array.buffer === buffer ? HEAPBUFFER : Buffer.from(u8Array.buffer) : Buffer.from(u8Array);
++      buf = buf.slice(idx, maxBytesToRead > 0 && idx + maxBytesToRead < buf.length ? idx + maxBytesToRead : buf.length);
++      var endPtr = buf.indexOf(0);
++      return buf.toString("utf8", 0, endPtr === -1 ? buf.length : endPtr);
++    }
++}
++
+ // Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the emscripten HEAP, returns a
+ // copy of that string as a Javascript String object.
+ // maxBytesToRead: an optional length that specifies the maximum number of bytes to read. You can omit
+@@ -150,6 +185,15 @@ function stringToUTF8Array(str, outU8Array, outIdx, maxBytesToWrite) {
+   if (!(maxBytesToWrite > 0)) // Parameter maxBytesToWrite is not optional. Negative values, 0, null, undefined and false each don't write out any bytes.
+     return 0;
+ 
++  if (ENVIRONMENT_IS_NODE && maxBytesToWrite > 30) {
++    // faster implementation of stringToUTF8Array for NodeJS
++    // see node-flatbuffers-addon/benchmark/benchmark-stringToUTF8Array.js
++    var buf = outU8Array.buffer === buffer ? HEAPBUFFER : Buffer.from(outU8Array.buffer);
++    var length = buf.utf8Write(str, outIdx, maxBytesToWrite);
++    outU8Array[outIdx + length] = 0;
++    return length;
++  }
++
+   var startIdx = outIdx;
+   var endIdx = outIdx + maxBytesToWrite - 1; // -1 for string null terminator.
+   for (var i = 0; i < str.length; ++i) {

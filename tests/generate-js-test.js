@@ -597,4 +597,28 @@ describe("generate-js", () => {
 
         testLibrary(nsp.Library, binary, DEFAULT_LIBRARY);
     });
+
+    it("should js_ts_global_prefix", () => {
+        const js = addon.js({
+            schema: DEFAULT_SCHEMA_BUFFER,
+            js_ts_global_prefix: "this."
+        });
+
+        const binary = addon.binary({
+            schema: DEFAULT_SCHEMA_BUFFER,
+            json_contents: DEFAULT_LIBRARY_JSON_BUFFER
+        });
+
+        const some = {};
+
+         // eslint-disable-next-line no-new-func
+        (new Function(js)).call({
+            some
+        });
+
+        const nsp = some.nested.namespace;
+        plainAccessor(nsp);
+
+        testLibrary(nsp.Library, binary, DEFAULT_LIBRARY);
+    });
 });

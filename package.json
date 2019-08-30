@@ -15,9 +15,11 @@
   "main": "index.js",
   "scripts": {
     "test": "_mocha --full-trace \"tests/*-test.js\"",
-    "prepublishOnly": "node scripts/clean.js && npm run install && npm run test",
+    "test-embind": "_mocha --full-trace tests/switch-to-embind.js \"tests/*-test.js\"",
+    "prepublishOnly": "echo \"Error: this branch should not be published\" && exit 1",
+    "rebuild": "node scripts/clean.js && npm run install && npm run test && npm run test-embind",
     "download-prerequisites": "node scripts/download-prerequisites.js",
-    "install": "npm run download-prerequisites && node-gyp rebuild"
+    "install": "npm run download-prerequisites && node-gyp rebuild && node scripts/embind.js"
   },
   "author": "Stéphane MBAPE <smbape@yahoo.fr>",
   "license": "MIT",
