@@ -5,9 +5,11 @@ const hasProp = Object.prototype.hasOwnProperty;
 const c_str = (str, null_terminated) => {
     if (typeof str === "string") {
         const byteLength = Buffer.byteLength(str, "utf8");
-        const buf = Buffer.allocUnsafe(byteLength + 1);
+        const buf = Buffer.allocUnsafe(null_terminated ? byteLength + 1 : byteLength);
         buf.write(str, "utf8");
-        buf[byteLength] = 0;
+        if (null_terminated) {
+            buf[byteLength] = 0;
+        }
         return buf;
     }
 
@@ -23,25 +25,27 @@ const c_str = (str, null_terminated) => {
 };
 
 const setOption = (options, prop, basename, ext, stringify) => {
-    if (options[prop] != null && options[`${ prop }_contents`] == null) {
-        options[`${ prop }_contents`] = options[prop];
+    const prop_contents = `${ prop }_contents`;
+
+    if (options[prop] != null && options[prop_contents] == null) {
+        options[prop_contents] = options[prop];
         options[prop] = null;
     }
 
-    if (options[prop] == null && options[`${ prop }_contents`] != null) {
+    if (options[prop] == null && options[prop_contents] != null) {
         options[prop] = `${ basename || prop }.${ ext }`;
     }
 
-    if (stringify && options[`${ prop }_contents`] !== null && typeof options[`${ prop }_contents`] === "object" && !Buffer.isBuffer(options[`${ prop }_contents`])) {
-        options[`${ prop }_contents`] = JSON.stringify(options[`${ prop }_contents`]);
+    if (stringify && options[prop_contents] !== null && typeof options[prop_contents] === "object" && !Buffer.isBuffer(options[prop_contents])) {
+        options[prop_contents] = JSON.stringify(options[prop_contents]);
     }
 
-    if (typeof options[`${ prop }_contents`] === "string") {
-        options[`${ prop }_contents`] = c_str(options[`${ prop }_contents`]);
+    if (typeof options[prop_contents] === "string") {
+        options[prop_contents] = c_str(options[prop_contents]);
     }
 
-    if (options[`${ prop }_contents`] != null) {
-        if (!Buffer.isBuffer(options[`${ prop }_contents`])) {
+    if (options[prop_contents] != null) {
+        if (!Buffer.isBuffer(options[prop_contents])) {
             throw new TypeError(`${ prop }_contents must be a string or a Buffer`);
         }
 
@@ -83,11 +87,9 @@ const schemaOptions = options => {
         }
     });
 
-    [ "include_prefix", "js_ts_global_prefix" ].forEach(prop => {
-        if (options[prop] != null) {
-            options[prop] = c_str(options[prop], true);
-        }
-    });
+    if (options.include_prefix != null) {
+        options.include_prefix = c_str(options.include_prefix, true);
+    }
 
     return options;
 };
