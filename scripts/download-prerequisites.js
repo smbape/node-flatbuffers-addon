@@ -93,11 +93,10 @@ const applyPatch = (dmp, file, cwd, patch, done) => {
         }
         result[0] = text.join("");
 
-        const [patched, [applied]] = result;
+        const [patched, applied] = result;
 
-        if (!applied) {
-            // console.log(`Error while patching '${ file }'`);
-            done();
+        if (applied.some(state => state === false)) {
+            done(new Error(`Patching '${ file }' FAILED. ${ applied }`));
             return;
         }
 
@@ -214,7 +213,7 @@ const patch = (dmp, tokenizer, q, cwd, patchfile, options, done) => {
     });
 };
 
-const version = "1.11.0";
+const version = "1.12.0";
 const cwd = sysPath.resolve(__dirname, "../deps/flatbuffers");
 
 const dmp = new diff_match_patch();
@@ -266,8 +265,7 @@ waterfall([
         }
 
         eachOfLimit([
-            sysPath.resolve(__dirname, "../patches/fix-numeric_limits-to-avoid-conflict-with-windows.h-header.patch"),
-            sysPath.resolve(__dirname, "../patches/flatbuffers-1.11.x-add_buffer_parsing.patch"),
+            sysPath.resolve(__dirname, "../patches/flatbuffers-1.12.x-add_buffer_parsing.patch"),
         ], 1, (file, i, next) => {
             patch(dmp, tokenizer, q, cwd, file, {
                 strip: 1

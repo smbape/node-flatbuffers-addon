@@ -1,8 +1,8 @@
 diff --git a/include/flatbuffers/code_generators.h b/include/flatbuffers/code_generators.h
-index c2ed707a..81cf7b4b 100644
+index bccd9fe0..27c08faa 100644
 --- a/include/flatbuffers/code_generators.h
 +++ b/include/flatbuffers/code_generators.h
-@@ -70,6 +70,7 @@ class CodeWriter {
+@@ -90,6 +90,7 @@ class CodeWriter {
  class BaseGenerator {
   public:
    virtual bool generate() = 0;
@@ -11,26 +11,26 @@ index c2ed707a..81cf7b4b 100644
    static std::string NamespaceDir(const Parser &parser, const std::string &path,
                                    const Namespace &ns);
 diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
-index 8299fe0c..ae166370 100644
+index 12b2b142..3a601df4 100644
 --- a/include/flatbuffers/idl.h
 +++ b/include/flatbuffers/idl.h
-@@ -398,6 +398,7 @@ struct ServiceDef : public Definition {
- // Container of options that may apply to any of the source/text generators.
- struct IDLOptions {
+@@ -511,6 +511,7 @@ struct IDLOptions {
+   // Use flexbuffers instead for binary and text generation
+   bool use_flexbuffers;
    bool strict_json;
 +  bool ignore_null_scalar;
    bool skip_js_exports;
    bool use_goog_js_export_format;
    bool use_ES6_js_export_format;
-@@ -476,6 +477,7 @@ struct IDLOptions {
- 
+@@ -605,6 +606,7 @@ struct IDLOptions {
    IDLOptions()
-       : strict_json(false),
+       : use_flexbuffers(false),
+         strict_json(false),
 +        ignore_null_scalar(false),
          skip_js_exports(false),
          use_goog_js_export_format(false),
          use_ES6_js_export_format(false),
-@@ -524,6 +526,9 @@ struct ParserState {
+@@ -660,6 +662,9 @@ struct ParserState {
          line_start_(nullptr),
          line_(0),
          token_(-1),
@@ -40,7 +40,7 @@ index 8299fe0c..ae166370 100644
          attr_is_trivial_ascii_string_(true) {}
  
   protected:
-@@ -547,6 +552,9 @@ struct ParserState {
+@@ -683,6 +688,9 @@ struct ParserState {
    const char *line_start_;
    int line_;  // the current line being parsed
    int token_;
@@ -50,7 +50,7 @@ index 8299fe0c..ae166370 100644
  
    // Flag: text in attribute_ is true ASCII string without escape
    // sequences. Only printable ASCII (without [\t\r\n]).
-@@ -666,6 +674,9 @@ class Parser : public ParserState {
+@@ -801,6 +809,9 @@ class Parser : public ParserState {
    bool Parse(const char *_source, const char **include_paths = nullptr,
               const char *source_filename = nullptr);
  
@@ -60,22 +60,22 @@ index 8299fe0c..ae166370 100644
    // Set the root type. May override the one set in the schema.
    bool SetRootType(const char *name);
  
-@@ -868,6 +879,10 @@ extern bool GenerateDart(const Parser &parser,
-                          const std::string &path,
+@@ -1016,6 +1027,10 @@ extern bool GenerateDart(const Parser &parser, const std::string &path,
+ extern bool GenerateJava(const Parser &parser, const std::string &path,
                           const std::string &file_name);
  
-+// Generate JavaScript or TypeScript code from the definitions in the Parser object.
-+// See idl_gen_js.
++// Generate JavaScript or TypeScript code from the definitions in the Parser
++// object. See idl_gen_js.
 +extern std::string GenerateJSTSCode(const Parser &parser);
 +
- // Generate JavaScript or TypeScript code from the definitions in the Parser object.
- // See idl_gen_js.
- extern bool GenerateJSTS(const Parser &parser,
+ // Generate JavaScript or TypeScript code from the definitions in the Parser
+ // object. See idl_gen_js.
+ extern bool GenerateJSTS(const Parser &parser, const std::string &path,
 diff --git a/src/code_generators.cpp b/src/code_generators.cpp
-index 3b10db7f..5bdb0ce5 100644
+index 46d65f7c..51ead386 100644
 --- a/src/code_generators.cpp
 +++ b/src/code_generators.cpp
-@@ -69,6 +69,10 @@ const char *BaseGenerator::FlatBuffersGeneratedWarning() {
+@@ -82,6 +82,10 @@ const char *BaseGenerator::FlatBuffersGeneratedWarning() {
           " do not modify";
  }
  
@@ -87,18 +87,18 @@ index 3b10db7f..5bdb0ce5 100644
                                          const std::string &path,
                                          const Namespace &ns) {
 diff --git a/src/flatc.cpp b/src/flatc.cpp
-index 78e4c5bf..40fd61c4 100644
+index 5cb2a80c..734c4047 100644
 --- a/src/flatc.cpp
 +++ b/src/flatc.cpp
-@@ -77,6 +77,7 @@ std::string FlatCompiler::GetUsageString(const char *program_name) const {
-     "  --version          Print the version number of flatc and exit.\n"
-     "  --strict-json      Strict JSON: field names must be / will be quoted,\n"
-     "                     no trailing commas in tables/vectors.\n"
+@@ -80,6 +80,7 @@ std::string FlatCompiler::GetUsageString(const char *program_name) const {
+     "  --version              Print the version number of flatc and exit.\n"
+     "  --strict-json          Strict JSON: field names must be / will be quoted,\n"
+     "                         no trailing commas in tables/vectors.\n"
 +    "  --ignore-null-scalar Ignore null values for scalar types\n"
-     "  --allow-non-utf8   Pass non-UTF-8 input through parser and emit nonstandard\n"
-     "                     \\x escapes in JSON. (Default is to raise parse error on\n"
-     "                     non-UTF-8 input.)\n"
-@@ -210,6 +211,8 @@ int FlatCompiler::Compile(int argc, const char **argv) {
+     "  --allow-non-utf8       Pass non-UTF-8 input through parser and emit nonstandard\n"
+     "                         \\x escapes in JSON. (Default is to raise parse error on\n"
+     "                         non-UTF-8 input.)\n"
+@@ -232,6 +233,8 @@ int FlatCompiler::Compile(int argc, const char **argv) {
          opts.keep_include_path = true;
        } else if (arg == "--strict-json") {
          opts.strict_json = true;
@@ -108,10 +108,10 @@ index 78e4c5bf..40fd61c4 100644
          opts.allow_non_utf8 = true;
        } else if (arg == "--natural-utf8") {
 diff --git a/src/idl_gen_js_ts.cpp b/src/idl_gen_js_ts.cpp
-index fea46208..cae08bf6 100644
+index 030c5526..f812f6ed 100644
 --- a/src/idl_gen_js_ts.cpp
 +++ b/src/idl_gen_js_ts.cpp
-@@ -82,7 +82,7 @@ class JsTsGenerator : public BaseGenerator {
+@@ -75,7 +75,7 @@ class JsTsGenerator : public BaseGenerator {
          lang_(GetJsLangParams(parser_.opts.lang)) {}
    // Iterate through all definitions we haven't generate code for (enums,
    // structs, and tables) and output them to a single file.
@@ -120,7 +120,7 @@ index fea46208..cae08bf6 100644
      imported_fileset imported_files;
      reexport_map reexports;
  
-@@ -112,6 +112,11 @@ class JsTsGenerator : public BaseGenerator {
+@@ -105,6 +105,11 @@ class JsTsGenerator : public BaseGenerator {
        code += exports_code;
      }
  
@@ -129,10 +129,10 @@ index fea46208..cae08bf6 100644
 + 
 +  bool generate() {
 +    std::string code = generateCode();
-     return SaveFile(GeneratedFileName(path_, file_name_, lang_).c_str(), code,
-                     false);
+     return SaveFile(GeneratedFileName(path_, file_name_, parser_.opts).c_str(),
+                     code, false);
    }
-@@ -1361,6 +1366,11 @@ class JsTsGenerator : public BaseGenerator {
+@@ -1377,6 +1382,11 @@ class JsTsGenerator : public BaseGenerator {
  };
  }  // namespace jsts
  
@@ -145,10 +145,10 @@ index fea46208..cae08bf6 100644
                    const std::string &file_name) {
    jsts::JsTsGenerator generator(parser, path, file_name);
 diff --git a/src/idl_parser.cpp b/src/idl_parser.cpp
-index e26aa550..95ba12d8 100644
+index 28ff3ec0..2d9fc051 100644
 --- a/src/idl_parser.cpp
 +++ b/src/idl_parser.cpp
-@@ -255,6 +255,10 @@ CheckedError Parser::Next() {
+@@ -272,6 +272,10 @@ CheckedError Parser::Next() {
    attribute_.clear();
    attr_is_trivial_ascii_string_ = true;
    for (;;) {
@@ -159,7 +159,7 @@ index e26aa550..95ba12d8 100644
      char c = *cursor_++;
      token_ = c;
      switch (c) {
-@@ -1036,7 +1040,7 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
+@@ -1089,7 +1093,7 @@ CheckedError Parser::ParseTable(const StructDef &struct_def, std::string *value,
              ECHECK(SkipAnyJsonValue());
            }
          } else {
@@ -168,7 +168,7 @@ index e26aa550..95ba12d8 100644
              ECHECK(Next());  // Ignore this field.
            } else {
              Value val = field->value;
-@@ -1942,6 +1946,11 @@ CheckedError Parser::ParseService() {
+@@ -2358,6 +2362,11 @@ CheckedError Parser::ParseService() {
    return NoError();
  }
  
@@ -180,7 +180,7 @@ index e26aa550..95ba12d8 100644
  bool Parser::SetRootType(const char *name) {
    root_struct_def_ = LookupStruct(name);
    if (!root_struct_def_)
-@@ -2418,6 +2427,9 @@ CheckedError Parser::StartParseFile(const char *source,
+@@ -2822,6 +2831,9 @@ CheckedError Parser::StartParseFile(const char *source,
    file_being_parsed_ = source_filename ? source_filename : "";
    source_ = source;
    ResetState(source_);
@@ -190,7 +190,7 @@ index e26aa550..95ba12d8 100644
    error_.clear();
    ECHECK(SkipByteOrderMark());
    NEXT();
-@@ -2561,6 +2573,8 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
+@@ -2965,6 +2977,8 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
          std::string contents;
          if (!LoadFile(filepath.c_str(), true, &contents))
            return Error("unable to load include file: " + name);
@@ -199,7 +199,7 @@ index e26aa550..95ba12d8 100644
          ECHECK(DoParse(contents.c_str(), include_paths, filepath.c_str(),
                         name.c_str()));
          // We generally do not want to output code for any included files:
-@@ -2570,6 +2584,7 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
+@@ -2974,6 +2988,7 @@ CheckedError Parser::DoParse(const char *source, const char **include_paths,
          root_struct_def_ = nullptr;
          file_identifier_.clear();
          file_extension_.clear();

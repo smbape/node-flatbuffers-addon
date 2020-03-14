@@ -1,11 +1,13 @@
 /* eslint-env node, mocha */
 /* eslint-disable no-magic-numbers, default-case, no-var */
 
+// From tests/JavaScriptTest.js
+
 const {assert} = require("chai");
 const {flatbuffers} = require("flatbuffers");
-const addon = require("../");
 const fs = require("fs");
 const sysPath = require("path");
+const addon = require("../");
 
 describe("flatbuffers", () => {
     const workDir = sysPath.resolve(__dirname, "fbs");
@@ -133,7 +135,7 @@ describe("flatbuffers", () => {
         const manaRes = monster.mutate_mana(10);
         assert.strictEqual(manaRes, false); // Field was NOT present, because default value.
 
-        // TODO: There is not the availability to mutate structs or vectors.
+    // TODO: There is not the availability to mutate structs or vectors.
     }
 
     function testBuffer(bb) {
@@ -288,8 +290,10 @@ describe("flatbuffers", () => {
         MyGame.Example.Monster.addTestarrayofstring(fbb, testarrayofstringOffset);
         MyGame.Example.Monster.addTestarrayoftables(fbb, testarrayoftablesOffset);
         MyGame.Example.Monster.addName(fbb, name);
-        MyGame.Example.Monster.finishMonsterBuffer(fbb, MyGame.Example.Monster.endMonster(fbb));
-        testReadingUnicode(new flatbuffers.ByteBuffer(fbb.asUint8Array()));
+        MyGame.Example.Monster.finishSizePrefixedMonsterBuffer(fbb, MyGame.Example.Monster.endMonster(fbb));
+        const bb = new flatbuffers.ByteBuffer(fbb.asUint8Array())
+        bb.setPosition(4);
+        testReadingUnicode(bb);
     }
 
     const __imul = Math.imul ? Math.imul : function(a, b) {
