@@ -241,7 +241,9 @@ q.error((err, task) => {
 });
 
 waterfall([
-    mkdirp.bind(mkdirp, cwd),
+    next => {
+        mkdirp(cwd).then(next.bind(null, null), next);
+    },
 
     (performed, next) => {
         if (!performed) {

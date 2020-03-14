@@ -2,5 +2,4 @@
 /build
 /deps
 /node_modules
-/package-lock.json
 /project.sublime-workspace
