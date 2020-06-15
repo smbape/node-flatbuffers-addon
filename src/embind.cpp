@@ -123,6 +123,7 @@ static ResultState GenerateJSTSCode(
 
 EMSCRIPTEN_BINDINGS(NODE_GYP_MODULE_NAME) {
     value_object<flatbuffers::IDLOptions>("IDLOptions")
+        .field("use_flexbuffers", &flatbuffers::IDLOptions::use_flexbuffers)
         .field("strict_json", &flatbuffers::IDLOptions::strict_json)
         .field("ignore_null_scalar", &flatbuffers::IDLOptions::ignore_null_scalar)
         .field("skip_js_exports", &flatbuffers::IDLOptions::skip_js_exports)
@@ -143,10 +144,11 @@ EMSCRIPTEN_BINDINGS(NODE_GYP_MODULE_NAME) {
         .field("generate_name_strings", &flatbuffers::IDLOptions::generate_name_strings)
         .field("generate_object_based_api", &flatbuffers::IDLOptions::generate_object_based_api)
         .field("gen_compare", &flatbuffers::IDLOptions::gen_compare)
-        .field("cpp_object_api_pointer_type", &flatbuffers::IDLOptions::cpp_object_api_pointer_type)
-        .field("cpp_object_api_string_type", &flatbuffers::IDLOptions::cpp_object_api_string_type)
-        .field("cpp_object_api_string_flexible_constructor", &flatbuffers::IDLOptions::cpp_object_api_string_flexible_constructor)
+        // .field("cpp_object_api_pointer_type", &flatbuffers::IDLOptions::cpp_object_api_pointer_type)
+        // .field("cpp_object_api_string_type", &flatbuffers::IDLOptions::cpp_object_api_string_type)
+        // .field("cpp_object_api_string_flexible_constructor", &flatbuffers::IDLOptions::cpp_object_api_string_flexible_constructor)
         .field("gen_nullable", &flatbuffers::IDLOptions::gen_nullable)
+        .field("java_checkerframework", &flatbuffers::IDLOptions::java_checkerframework)
         .field("gen_generated", &flatbuffers::IDLOptions::gen_generated)
         .field("object_prefix", &flatbuffers::IDLOptions::object_prefix)
         .field("object_suffix", &flatbuffers::IDLOptions::object_suffix)
@@ -157,21 +159,30 @@ EMSCRIPTEN_BINDINGS(NODE_GYP_MODULE_NAME) {
         .field("keep_include_path", &flatbuffers::IDLOptions::keep_include_path)
         .field("binary_schema_comments", &flatbuffers::IDLOptions::binary_schema_comments)
         .field("binary_schema_builtins", &flatbuffers::IDLOptions::binary_schema_builtins)
+        .field("binary_schema_gen_embed", &flatbuffers::IDLOptions::binary_schema_gen_embed)
         .field("skip_flatbuffers_import", &flatbuffers::IDLOptions::skip_flatbuffers_import)
-        .field("go_import", &flatbuffers::IDLOptions::go_import)
-        .field("go_namespace", &flatbuffers::IDLOptions::go_namespace)
+        // .field("go_import", &flatbuffers::IDLOptions::go_import)
+        // .field("go_namespace", &flatbuffers::IDLOptions::go_namespace)
         .field("reexport_ts_modules", &flatbuffers::IDLOptions::reexport_ts_modules)
         .field("js_ts_short_names", &flatbuffers::IDLOptions::js_ts_short_names)
         .field("protobuf_ascii_alike", &flatbuffers::IDLOptions::protobuf_ascii_alike)
         .field("size_prefixed", &flatbuffers::IDLOptions::size_prefixed)
         .field("root_type", &flatbuffers::IDLOptions::root_type)
         .field("force_defaults", &flatbuffers::IDLOptions::force_defaults)
+        .field("java_primitive_has_method", &flatbuffers::IDLOptions::java_primitive_has_method)
+        .field("cs_gen_json_serializer", &flatbuffers::IDLOptions::cs_gen_json_serializer)
+        // .field("cpp_includes", &flatbuffers::IDLOptions::cpp_includes)
+        // .field("cpp_std", &flatbuffers::IDLOptions::cpp_std)
+        .field("proto_namespace_suffix", &flatbuffers::IDLOptions::proto_namespace_suffix)
+        .field("filename_suffix", &flatbuffers::IDLOptions::filename_suffix)
+        .field("filename_extension", &flatbuffers::IDLOptions::filename_extension)
         .field("js_ts_global_prefix", &flatbuffers::IDLOptions::js_ts_global_prefix)
 
         .field("lang", &flatbuffers::IDLOptions::lang)
         .field("mini_reflect", &flatbuffers::IDLOptions::mini_reflect)
         .field("lang_to_generate", &flatbuffers::IDLOptions::lang_to_generate)
-        .field("set_empty_to_null", &flatbuffers::IDLOptions::set_empty_to_null)
+        .field("set_empty_strings_to_null", &flatbuffers::IDLOptions::set_empty_strings_to_null)
+        .field("set_empty_vectors_to_null", &flatbuffers::IDLOptions::set_empty_vectors_to_null)
     ;
 
     enum_<flatbuffers::IDLOptions::Language>("Language")
@@ -190,6 +201,8 @@ EMSCRIPTEN_BINDINGS(NODE_GYP_MODULE_NAME) {
         .value("kLua", flatbuffers::IDLOptions::kLua)
         .value("kLobster", flatbuffers::IDLOptions::kLobster)
         .value("kRust", flatbuffers::IDLOptions::kRust)
+        .value("kKotlin", flatbuffers::IDLOptions::kKotlin)
+        .value("kSwift", flatbuffers::IDLOptions::kSwift)
         .value("kMAX", flatbuffers::IDLOptions::kMAX)
         ;
 
@@ -287,4 +300,5 @@ EMSCRIPTEN_BINDINGS(NODE_GYP_MODULE_NAME) {
     }));
 
     register_vector<uintptr_t>("vector<uintptr_t>");
+    // register_vector<std::string>("vector<std::string>");
 }

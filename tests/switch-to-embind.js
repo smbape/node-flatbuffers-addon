@@ -15,7 +15,7 @@ const c_str = str => {
 };
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray#Syntax
-const isTypedArray = obj => {
+var isTypedArray = typeof BigInt64Array === "function" ? obj => {
     return (obj instanceof Int8Array) ||
         (obj instanceof Uint8Array) ||
         (obj instanceof Uint8ClampedArray) ||
@@ -25,8 +25,18 @@ const isTypedArray = obj => {
         (obj instanceof Uint32Array) ||
         (obj instanceof Float32Array) ||
         (obj instanceof Float64Array) ||
-        (typeof BigInt64Array === "function" && obj instanceof BigInt64Array) ||
-        (typeof BigUint64Array === "function" && obj instanceof BigUint64Array);
+        (obj instanceof BigInt64Array) ||
+        (obj instanceof BigUint64Array);
+} : obj => {
+    return (obj instanceof Int8Array) ||
+        (obj instanceof Uint8Array) ||
+        (obj instanceof Uint8ClampedArray) ||
+        (obj instanceof Int16Array) ||
+        (obj instanceof Uint16Array) ||
+        (obj instanceof Int32Array) ||
+        (obj instanceof Uint32Array) ||
+        (obj instanceof Float32Array) ||
+        (obj instanceof Float64Array);
 };
 
 const setOption = (options, prop, basename, ext, stringify) => {

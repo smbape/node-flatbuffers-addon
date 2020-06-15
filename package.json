@@ -10,7 +10,7 @@
     "flatbuffers"
   ],
   "engines": {
-    "node": ">=8.0.0"
+    "node": ">=8.10.0"
   },
   "main": "index.js",
   "scripts": {
@@ -18,8 +18,7 @@
     "test-embind": "_mocha --full-trace tests/switch-to-embind.js \"tests/*-test.js\"",
     "prepublishOnly": "echo \"Error: this branch should not be published\" && exit 1",
     "rebuild": "node scripts/clean.js && npm run install && npm run test && npm run test-embind",
-    "download-prerequisites": "node scripts/download-prerequisites.js",
-    "install": "npm run download-prerequisites && node-gyp rebuild && node scripts/embind.js"
+    "install": "node scripts/download-prerequisites.js && node-gyp rebuild && node scripts/embind.js"
   },
   "author": "Stéphane MBAPE <smbape@yahoo.fr>",
   "license": "MIT",
@@ -29,6 +28,8 @@
     "diff-match-patch": "^1.0.4",
     "mkdirp": "^1.0.3",
     "node-gyp": "^6.1.0",
+    "node-pre-gyp": "^0.15.0",
+    "node-pre-gyp-github": "^1.4.3",
     "request": "^2.88.2",
     "tar": "^6.0.1"
   },

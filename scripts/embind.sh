@@ -48,32 +48,39 @@ cd "${WORK_DIR}/${repodir}"
 # Activate PATH and other environment variables in the current terminal
 source ./emsdk_env.sh
 
-CMAKE_TOOLCHAIN_FILE="${EMSDK}/fastcomp/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+CMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
 
 if [ ! -f "${CMAKE_TOOLCHAIN_FILE}" ]; then
     # Download and install the latest SDK tools.
     ./emsdk install latest || die 'Failed to install latest emsdk' $?
 
     # Make the "latest" SDK "active" for the current user. (writes ~/.emscripten file)
-    ./emsdk activate latest || die 'Failed to activate latest emsdk' $?
+    ./emsdk activate --embedded latest || die 'Failed to activate latest emsdk' $?
 
     # Activate PATH and other environment variables in the current terminal
     source ./emsdk_env.sh
 fi
 
-if [ ! -d "${EMSDK}/fastcomp/emscripten/.git" ]; then
-    cd "${EMSDK}/fastcomp/emscripten"
+if [ ! -d "${EMSDK}/upstream/emscripten/.git" ]; then
+    cd "${EMSDK}/upstream/emscripten"
     git init
     git remote add origin https://github.com/emscripten-core/emscripten.git
-    git fetch origin incoming --depth 1 --update-shallow
+    git fetch origin master --depth 1
     git clean -xdf
-    git checkout incoming
+    git checkout master
     git apply -v "${ROOT_DIR}/patches/emscripten-optimze-nodejs-env.patch" || die 'Failed to patch emscripten' $?
+else
+    git pull || die 'Failed to pull emscripten' $?
+fi
+
+if [ ! -d "${EMSDK}/upstream/emscripten/node_modules" ]; then
+    cd "${EMSDK}/upstream/emscripten"
+    npm ci --production || die 'Failed to install npm modules' $?
 fi
 
 mkdir -p "${WORK_DIR}/flatbuffers" && \
 cd "${WORK_DIR}/flatbuffers" && \
-cmake -DBUILD_EMBIND=ON -DCMAKE_TOOLCHAIN_FILE="${CMAKE_TOOLCHAIN_FILE}" "${ROOT_DIR}" && \
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_EMBIND=ON -DCMAKE_TOOLCHAIN_FILE="${CMAKE_TOOLCHAIN_FILE}" "${ROOT_DIR}" && \
 cmake --build . || die 'Failed to build.'
 
 cp -f "${WORK_DIR}/flatbuffers/flatbuffers_addon_"* "$ROOT_DIR/lib/"

@@ -88,8 +88,8 @@ const schemaOptions = options => {
     });
 
     [ "include_prefix", "js_ts_global_prefix" ].forEach(prop => {
-        if (options.include_prefix != null) {
-            options.include_prefix = c_str(options.include_prefix, true);
+        if (options[prop] != null) {
+            options[prop] = c_str(options[prop], true);
         }
     });
 

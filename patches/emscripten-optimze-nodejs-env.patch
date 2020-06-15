@@ -1,8 +1,8 @@
 diff --git a/src/embind/embind.js b/src/embind/embind.js
-index ba66240..44ff487 100644
+index 9161c7d..ba7e363 100644
 --- a/src/embind/embind.js
 +++ b/src/embind/embind.js
-@@ -627,7 +627,13 @@ var LibraryEmbind = {
+@@ -630,7 +630,13 @@ var LibraryEmbind = {
  
      registerType(rawType, {
          name: name,
@@ -17,7 +17,7 @@ index ba66240..44ff487 100644
              var length = HEAPU32[value >> 2];
  
              var str;
-@@ -1308,6 +1314,12 @@ var LibraryEmbind = {
+@@ -1326,6 +1332,12 @@ var LibraryEmbind = {
              };
          });
  
@@ -30,7 +30,7 @@ index ba66240..44ff487 100644
          return [{
              name: reg.name,
              'fromWireType': function(ptr) {
-@@ -1319,16 +1331,18 @@ var LibraryEmbind = {
+@@ -1337,16 +1349,18 @@ var LibraryEmbind = {
                  return rv;
              },
              'toWireType': function(destructors, o) {
@@ -55,10 +55,10 @@ index ba66240..44ff487 100644
                  if (destructors !== null) {
                      destructors.push(rawDestructor, ptr);
 diff --git a/src/preamble.js b/src/preamble.js
-index 69291a5..6ab27e6 100644
+index 808bab0..ddf2002 100644
 --- a/src/preamble.js
 +++ b/src/preamble.js
-@@ -280,6 +280,8 @@ function alignUp(x, multiple) {
+@@ -331,6 +331,8 @@ function alignUp(x, multiple) {
  var HEAP,
  /** @type {ArrayBuffer} */
    buffer,
@@ -67,7 +67,7 @@ index 69291a5..6ab27e6 100644
  /** @type {Int8Array} */
    HEAP8,
  /** @type {Uint8Array} */
-@@ -299,6 +301,9 @@ var HEAP,
+@@ -350,6 +352,9 @@ var HEAP,
  
  function updateGlobalBufferAndViews(buf) {
    buffer = buf;
@@ -78,10 +78,10 @@ index 69291a5..6ab27e6 100644
    Module['HEAP16'] = HEAP16 = new Int16Array(buf);
    Module['HEAP32'] = HEAP32 = new Int32Array(buf);
 diff --git a/src/runtime_strings.js b/src/runtime_strings.js
-index 6c0b613..de235dc 100644
+index 328485b..6111549 100644
 --- a/src/runtime_strings.js
 +++ b/src/runtime_strings.js
-@@ -107,6 +107,41 @@ function UTF8ArrayToString(u8Array, idx, maxBytesToRead) {
+@@ -80,6 +80,41 @@ function UTF8ArrayToString(u8Array, idx, maxBytesToRead) {
  #endif // TEXTDECODER == 2
  }
  
@@ -123,7 +123,7 @@ index 6c0b613..de235dc 100644
  // Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the emscripten HEAP, returns a
  // copy of that string as a Javascript String object.
  // maxBytesToRead: an optional length that specifies the maximum number of bytes to read. You can omit
-@@ -150,6 +185,15 @@ function stringToUTF8Array(str, outU8Array, outIdx, maxBytesToWrite) {
+@@ -123,6 +158,15 @@ function stringToUTF8Array(str, outU8Array, outIdx, maxBytesToWrite) {
    if (!(maxBytesToWrite > 0)) // Parameter maxBytesToWrite is not optional. Negative values, 0, null, undefined and false each don't write out any bytes.
      return 0;
  
