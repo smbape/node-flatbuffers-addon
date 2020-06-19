@@ -163,7 +163,7 @@ const DEFAULT_RANKED_SCHEMA = `
     root_type Library;
 `;
 
-const DEFAULT_RANKED_SCHEMA_BUFFER = Buffer.from(DEFAULT_RANKED_SCHEMA);
+// const DEFAULT_RANKED_SCHEMA_BUFFER = Buffer.from(DEFAULT_RANKED_SCHEMA);
 
 const DEFAULT_LIBRARY = {
     name: "BookShop 0",
@@ -582,10 +582,10 @@ describe("generate-js", () => {
         const sandbox = {};
 
          // eslint-disable-next-line no-new-func
-        const nsp = (new Function(addon.js({
+        const nsp = (new Function(`${ addon.js({
             schema: DEFAULT_SCHEMA_BUFFER,
             skip_js_exports: true
-        }) + "; return some;")).call(sandbox).nested.namespace;
+        }) }; return some;`)).call(sandbox).nested.namespace;
         plainAccessor(nsp);
 
         expect(sandbox.some).to.equal(undefined);

@@ -213,67 +213,76 @@ const patch = (dmp, tokenizer, q, cwd, patchfile, options, done) => {
     });
 };
 
-const version = "1.12.0";
-const cwd = sysPath.resolve(__dirname, "../deps/flatbuffers");
+const download = cb => {
+    const version = "1.12.0";
+    const cwd = sysPath.resolve(__dirname, "../deps/flatbuffers");
 
-const dmp = new diff_match_patch();
-dmp.Patch_Margin = 3;
-dmp.Match_Threshold = 0;
-dmp.Match_Distance = -100;
-dmp.noPatchPadding = true;
+    const dmp = new diff_match_patch();
+    dmp.Patch_Margin = 3;
+    dmp.Match_Threshold = 0;
+    dmp.Match_Distance = -100;
+    dmp.noPatchPadding = true;
 
-const tokenizer = /(?:(?:^(?:---|\+\+\+) ([^\r\n]+))|(?:^@@ -\d+,(\d+) \+\d+,(\d+) @@)|(^[- +]|\n)|$)/mg;
+    const tokenizer = /(?:(?:^(?:---|\+\+\+) ([^\r\n]+))|(?:^@@ -\d+,(\d+) \+\d+,(\d+) @@)|(^[- +]|\n)|$)/mg;
 
-const q = queue((task, next) => {
-    if (task == null) {
-        next();
-        return;
-    }
-
-    const {fn, args} = task;
-
-    fn(...args.concat([next]));
-});
-
-q.error((err, task) => {
-    throw err;
-});
-
-waterfall([
-    next => {
-        mkdirp(cwd).then(next.bind(null, null), next);
-    },
-
-    (performed, next) => {
-        if (!performed) {
-            next(null, performed);
-            return;
-        }
-
-        request(`https://github.com/google/flatbuffers/archive/v${ version }.tar.gz`).pipe(tar.x({
-            strip: 1,
-            C: cwd
-        })).on("close", () => {
-            next(null, performed);
-        }).on("error", next);
-    },
-
-    (performed, next) => {
-        if (!performed) {
+    const q = queue((task, next) => {
+        if (task == null) {
             next();
             return;
         }
 
-        eachOfLimit([
-            sysPath.resolve(__dirname, "../patches/flatbuffers-1.12.x-add_buffer_parsing.patch"),
-        ], 1, (file, i, next) => {
-            patch(dmp, tokenizer, q, cwd, file, {
-                strip: 1
-            }, next);
-        }, next);
-    }
-], err => {
-    if (err) {
+        const {fn, args} = task;
+
+        fn(...args.concat([next]));
+    });
+
+    q.error((err, task) => {
         throw err;
-    }
-});
+    });
+
+    waterfall([
+        next => {
+            mkdirp(cwd).then(next.bind(null, null), next);
+        },
+
+        (performed, next) => {
+            if (!performed) {
+                next(null, performed);
+                return;
+            }
+
+            request(`https://github.com/google/flatbuffers/archive/v${ version }.tar.gz`).pipe(tar.x({
+                strip: 1,
+                C: cwd
+            })).on("close", () => {
+                next(null, performed);
+            }).on("error", next);
+        },
+
+        (performed, next) => {
+            if (!performed) {
+                next();
+                return;
+            }
+
+            eachOfLimit([
+                sysPath.resolve(__dirname, "../patches/flatbuffers-1.12.x-add_buffer_parsing.patch"),
+            ], 1, (file, i, next) => {
+                patch(dmp, tokenizer, q, cwd, file, {
+                    strip: 1
+                }, next);
+            }, next);
+        }
+    ], cb);
+};
+
+
+module.exports = download;
+
+if (process.argv[1] === __filename) {
+    download(err => {
+        if (err) {
+            throw err;
+        }
+    });
+}
