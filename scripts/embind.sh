@@ -50,7 +50,8 @@ source ./emsdk_env.sh
 
 CMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
 
-if [ ! -f "${CMAKE_TOOLCHAIN_FILE}" ]; then
+command -v emcc &>/dev/null && emcc -v &>/dev/null
+if [ $? -ne 0 ]; then
     # Download and install the latest SDK tools.
     ./emsdk install latest || die 'Failed to install latest emsdk' $?
 

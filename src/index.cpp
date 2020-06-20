@@ -367,6 +367,8 @@ napi_value GenerateJS(napi_env env, napi_callback_info info) {
         opts.include_prefix = flatbuffers::ConCatPathFileName(flatbuffers::PosixPath(opts.include_prefix.c_str()), "");
     }
 
+    SET_STRING_OPT("js_ts_global_prefix", js_ts_global_prefix);
+
     opts.lang = flatbuffers::IDLOptions::kJs;
 
     status = napi_create_string_utf8(env, "type", NAPI_AUTO_LENGTH, &key);

@@ -11,7 +11,7 @@ index bccd9fe0..27c08faa 100644
    static std::string NamespaceDir(const Parser &parser, const std::string &path,
                                    const Namespace &ns);
 diff --git a/include/flatbuffers/idl.h b/include/flatbuffers/idl.h
-index 12b2b142..3a601df4 100644
+index 12b2b142..039c4cde 100644
 --- a/include/flatbuffers/idl.h
 +++ b/include/flatbuffers/idl.h
 @@ -511,6 +511,7 @@ struct IDLOptions {
@@ -22,7 +22,15 @@ index 12b2b142..3a601df4 100644
    bool skip_js_exports;
    bool use_goog_js_export_format;
    bool use_ES6_js_export_format;
-@@ -605,6 +606,7 @@ struct IDLOptions {
+@@ -561,6 +562,7 @@ struct IDLOptions {
+   std::string proto_namespace_suffix;
+   std::string filename_suffix;
+   std::string filename_extension;
++  std::string js_ts_global_prefix;
+ 
+   // Possible options for the more general generator below.
+   enum Language {
+@@ -605,6 +607,7 @@ struct IDLOptions {
    IDLOptions()
        : use_flexbuffers(false),
          strict_json(false),
@@ -30,7 +38,7 @@ index 12b2b142..3a601df4 100644
          skip_js_exports(false),
          use_goog_js_export_format(false),
          use_ES6_js_export_format(false),
-@@ -660,6 +662,9 @@ struct ParserState {
+@@ -660,6 +663,9 @@ struct ParserState {
          line_start_(nullptr),
          line_(0),
          token_(-1),
@@ -40,7 +48,7 @@ index 12b2b142..3a601df4 100644
          attr_is_trivial_ascii_string_(true) {}
  
   protected:
-@@ -683,6 +688,9 @@ struct ParserState {
+@@ -683,6 +689,9 @@ struct ParserState {
    const char *line_start_;
    int line_;  // the current line being parsed
    int token_;
@@ -50,7 +58,7 @@ index 12b2b142..3a601df4 100644
  
    // Flag: text in attribute_ is true ASCII string without escape
    // sequences. Only printable ASCII (without [\t\r\n]).
-@@ -801,6 +809,9 @@ class Parser : public ParserState {
+@@ -801,6 +810,9 @@ class Parser : public ParserState {
    bool Parse(const char *_source, const char **include_paths = nullptr,
               const char *source_filename = nullptr);
  
@@ -60,7 +68,7 @@ index 12b2b142..3a601df4 100644
    // Set the root type. May override the one set in the schema.
    bool SetRootType(const char *name);
  
-@@ -1016,6 +1027,10 @@ extern bool GenerateDart(const Parser &parser, const std::string &path,
+@@ -1016,6 +1028,10 @@ extern bool GenerateDart(const Parser &parser, const std::string &path,
  extern bool GenerateJava(const Parser &parser, const std::string &path,
                           const std::string &file_name);
  
@@ -108,7 +116,7 @@ index 5cb2a80c..734c4047 100644
          opts.allow_non_utf8 = true;
        } else if (arg == "--natural-utf8") {
 diff --git a/src/idl_gen_js_ts.cpp b/src/idl_gen_js_ts.cpp
-index 030c5526..f812f6ed 100644
+index 030c5526..6745ae4c 100644
 --- a/src/idl_gen_js_ts.cpp
 +++ b/src/idl_gen_js_ts.cpp
 @@ -75,7 +75,7 @@ class JsTsGenerator : public BaseGenerator {
@@ -132,7 +140,20 @@ index 030c5526..f812f6ed 100644
      return SaveFile(GeneratedFileName(path_, file_name_, parser_.opts).c_str(),
                      code, false);
    }
-@@ -1377,6 +1382,11 @@ class JsTsGenerator : public BaseGenerator {
+@@ -223,7 +228,11 @@ class JsTsGenerator : public BaseGenerator {
+             exports += "this." + *it + " = " + *it + ";\n";
+           }
+         }
+-        code += *it + " = " + *it + " || {};\n\n";
++        if (parser_.opts.js_ts_global_prefix.empty()) {
++          code += *it + " = " + *it + " || {};\n\n";
++        } else {
++          code += *it + " = " + parser_.opts.js_ts_global_prefix + *it + " || {};\n\n";
++        }
+       }
+     }
+   }
+@@ -1377,6 +1386,11 @@ class JsTsGenerator : public BaseGenerator {
  };
  }  // namespace jsts
  

@@ -135,7 +135,7 @@ describe("flatbuffers", () => {
         const manaRes = monster.mutate_mana(10);
         assert.strictEqual(manaRes, false); // Field was NOT present, because default value.
 
-    // TODO: There is not the availability to mutate structs or vectors.
+        // TODO: There is not the availability to mutate structs or vectors.
     }
 
     function testBuffer(bb) {
@@ -291,7 +291,7 @@ describe("flatbuffers", () => {
         MyGame.Example.Monster.addTestarrayoftables(fbb, testarrayoftablesOffset);
         MyGame.Example.Monster.addName(fbb, name);
         MyGame.Example.Monster.finishSizePrefixedMonsterBuffer(fbb, MyGame.Example.Monster.endMonster(fbb));
-        const bb = new flatbuffers.ByteBuffer(fbb.asUint8Array())
+        const bb = new flatbuffers.ByteBuffer(fbb.asUint8Array());
         bb.setPosition(4);
         testReadingUnicode(bb);
     }

@@ -1,4 +1,4 @@
-const addon = require("bindings")("addon.node");
+const addon = require("node-gyp-build")(__dirname);
 
 const hasProp = Object.prototype.hasOwnProperty;
 
