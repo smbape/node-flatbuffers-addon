@@ -16,11 +16,11 @@
   "scripts": {
     "test": "mocha --full-trace \"tests/*-test.js\"",
     "test-embind": "mocha --full-trace tests/switch-to-embind.js \"tests/*-test.js\"",
-    "build": "node scripts/build.js",
+    "build": "node scripts/build.js && node scripts/embind.js",
     "rebuild": "node scripts/clean.js && node scripts/download-prerequisites.js && npm run build",
     "version": "npm run rebuild && npm run test && git add prebuilds",
     "prepublishOnly": "echo \"Error: this branch should not be published\" && exit 1",
-    "install": "node scripts/install.js && node scripts/embind.js"
+    "install": "node scripts/install.js"
   },
   "author": "Stéphane MBAPE <smbape@yahoo.fr>",
   "license": "MIT",

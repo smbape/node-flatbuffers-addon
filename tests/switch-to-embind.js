@@ -4,7 +4,7 @@ const { expect } = require("chai");
 const native_addon = require("../");
 const flatbuffers_addon = require("../lib/flatbuffers_addon");
 
-const {toString} = Object.prototype;
+const {hasOwnProperty: hasProp} = Object.prototype;
 
 const c_str = str => {
     const len = Buffer.byteLength(str, "utf8");
@@ -40,38 +40,46 @@ var isTypedArray = typeof BigInt64Array === "function" ? obj => {
 };
 
 const setOption = (options, prop, basename, ext, stringify) => {
-    if (options[prop] != null && options[`${ prop }_contents`] == null) {
-        options[`${ prop }_contents`] = options[prop];
-        options[prop] = null;
+    const prop_contents = `${ prop }_contents`;
+    const prop_length = `${ prop }_length`;
+    let contents = hasProp.call(options, prop_contents) ? options[prop_contents] : null;
+    let value = hasProp.call(options, prop) ? options[prop] : null;
+
+    if (contents == null && value != null) {
+        contents = value;
+        value = null;
     }
 
-    if (options[prop] == null && options[`${ prop }_contents`] != null) {
-        options[prop] = `${ basename || prop }.${ ext }`;
+    if (value == null && contents != null) {
+        value = `${ basename || prop }.${ ext }`;
     }
 
-    if (stringify && options[`${ prop }_contents`] !== null && typeof options[`${ prop }_contents`] === "object" && !isTypedArray(options[`${ prop }_contents`])) {
-        options[`${ prop }_contents`] = JSON.stringify(options[`${ prop }_contents`]);
+    if (stringify && contents !== null && typeof contents === "object" && !isTypedArray(contents)) {
+        contents = JSON.stringify(contents);
     }
 
-    if (typeof options[`${ prop }_contents`] === "string") {
-        options[`${ prop }_contents`] = c_str(options[`${ prop }_contents`]);
+    if (typeof contents === "string") {
+        contents = c_str(contents);
     }
 
-    if (options[`${ prop }_contents`] && !isTypedArray(options[`${ prop }_contents`])) {
+    if (contents && !isTypedArray(contents)) {
         throw new TypeError(`${ prop }_contents must be a string or a TypedArray`);
     }
 
-    if (options[`${ prop }_length`] == null && options[`${ prop }_contents`]) {
-        options[`${ prop }_length`] = options[`${ prop }_contents`].length;
+    if (options[prop_length] == null && contents) {
+        options[prop_length] = contents.length;
     }
 
-    if (options[`${ prop }_contents`] && isTypedArray(options[prop])) {
+    if (contents && isTypedArray(value)) {
         throw new TypeError(`if ${ prop } is a TypedArray, ${ prop }_contents must be null or undefined`);
     }
 
-    if (options[prop] && typeof options[prop] !== "string") {
+    if (value && typeof value !== "string") {
         throw new TypeError(`${ prop } must be a string`);
     }
+
+    options[prop_contents] = contents;
+    options[prop] = value;
 };
 
 const schemaOptions = options => {

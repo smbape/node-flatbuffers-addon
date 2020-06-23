@@ -166,6 +166,7 @@ if(BUILD_EMBIND)
   set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "-O3")
   set(CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO "-O3 -g")
 
+  # https://github.com/emscripten-core/emscripten/blob/master/src/settings.js
   set(LINK_FLAGS "${LINK_FLAGS} --bind --no-entry -s STRICT=1")
   set(LINK_FLAGS "${LINK_FLAGS} -s INVOKE_RUN=0 -s ALLOW_MEMORY_GROWTH=1")
   set(LINK_FLAGS "${LINK_FLAGS} -s NODERAWFS=1 -lnodefs.js -lnoderawfs.js")

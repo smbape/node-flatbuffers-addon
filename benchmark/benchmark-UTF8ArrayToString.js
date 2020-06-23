@@ -1,6 +1,6 @@
 const assert = require("assert");
 
-var UTF8Decoder = typeof TextDecoder !== "undefined" ? new TextDecoder("utf8") : undefined;
+const UTF8Decoder = typeof TextDecoder !== "undefined" ? new TextDecoder("utf8") : undefined;
 
 const c_str = str => {
     const len = Buffer.byteLength(str, "utf8");
@@ -10,7 +10,7 @@ const c_str = str => {
     return new Uint8Array(buffer);
 };
 
-var isTypedArray = typeof BigInt64Array === "function" ? function(obj) {
+const isTypedArray = typeof BigInt64Array === "function" ? function(obj) {
     return (obj instanceof Int8Array) ||
         (obj instanceof Uint8Array) ||
         (obj instanceof Uint8ClampedArray) ||
@@ -38,7 +38,7 @@ function UTF8ArrayToStringUTF8DecoderLoop(u8Array, idx, maxBytesToRead) {
     var endIdx = idx + maxBytesToRead;
     var endPtr = idx;
     while (u8Array[endPtr] && !(endPtr >= endIdx)) ++endPtr;
-    return UTF8Decoder.decode(u8Array.subarray(idx, endPtr));;
+    return UTF8Decoder.decode(u8Array.subarray(idx, endPtr));
 }
 
 function UTF8ArrayToStringUTF8DecoderIndexOf(u8Array, idx, maxBytesToRead) {
@@ -46,6 +46,11 @@ function UTF8ArrayToStringUTF8DecoderIndexOf(u8Array, idx, maxBytesToRead) {
     var subarray = u8Array.subarray(idx, endIdx);
     var endPtr = subarray.indexOf(0);
     return UTF8Decoder.decode(endPtr === -1 ? subarray : subarray.subarray(0, endPtr));
+}
+
+function UTF8ArrayToStringUTF8DecoderKnown(u8Array, idx, maxBytesToRead, buffer, HEAPBUFFER) {
+    var endPtr = idx + HEAPBUFFER.length - 1;
+    return UTF8Decoder.decode(u8Array.subarray(idx, endPtr));
 }
 
 function UTF8ArrayToStringFromCharCode(u8Array, idx, maxBytesToRead) {
@@ -80,12 +85,34 @@ function UTF8ArrayToStringFromCharCode(u8Array, idx, maxBytesToRead) {
     return str;
 }
 
-function UTF8ArrayToStringBufferIndexOf(u8Array, idx, maxBytesToRead, buffer, HEAPBUFFER) {
-    var buf = isTypedArray(u8Array) ? u8Array.buffer === buffer ? HEAPBUFFER : Buffer.from(u8Array.buffer) : Buffer.from(u8Array);
-    var endIdx = maxBytesToRead > 0 && idx + maxBytesToRead < buf.length ? idx + maxBytesToRead : buf.length;
-    buf = buf.slice(idx, endIdx);
-    var endPtr = buf.indexOf(0);
-    return buf.toString("utf8", 0, endPtr === -1 ? buf.length : endPtr);
+function UTF8ArrayToStringFromCharCodeKnown(u8Array, idx, maxBytesToRead, buffer, HEAPBUFFER) {
+    var endPtr = idx + HEAPBUFFER.length - 1;
+    var str = "";
+    while (idx < endPtr) {
+        var u0 = u8Array[idx++];
+        if (!(u0 & 128)) {
+            str += String.fromCharCode(u0);
+            continue;
+        }
+        var u1 = u8Array[idx++] & 63;
+        if ((u0 & 224) == 192) {
+            str += String.fromCharCode((u0 & 31) << 6 | u1);
+            continue;
+        }
+        var u2 = u8Array[idx++] & 63;
+        if ((u0 & 240) == 224) {
+            u0 = (u0 & 15) << 12 | u1 << 6 | u2;
+        } else {
+            u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | u8Array[idx++] & 63;
+        }
+        if (u0 < 65536) {
+            str += String.fromCharCode(u0);
+        } else {
+            var ch = u0 - 65536;
+            str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
+        }
+    }
+    return str;
 }
 
 function UTF8ArrayToStringBufferLoop(u8Array, idx, maxBytesToRead, buffer, HEAPBUFFER) {
@@ -96,6 +123,19 @@ function UTF8ArrayToStringBufferLoop(u8Array, idx, maxBytesToRead, buffer, HEAPB
     return buf.toString("utf8", idx, endPtr);
 }
 
+function UTF8ArrayToStringBufferIndexOf(u8Array, idx, maxBytesToRead, buffer, HEAPBUFFER) {
+    var buf = isTypedArray(u8Array) ? u8Array.buffer === buffer ? HEAPBUFFER : Buffer.from(u8Array.buffer) : Buffer.from(u8Array);
+    var endIdx = maxBytesToRead > 0 && idx + maxBytesToRead < buf.length ? idx + maxBytesToRead : buf.length;
+    buf = buf.slice(idx, endIdx);
+    var endPtr = buf.indexOf(0);
+    return buf.toString("utf8", 0, endPtr === -1 ? buf.length : endPtr);
+}
+
+function UTF8ArrayToStringBufferKnown(u8Array, idx, maxBytesToRead, buffer, HEAPBUFFER) {
+    var endPtr = idx + HEAPBUFFER.length - 1;
+    return HEAPBUFFER.toString("utf8", idx, endPtr);
+}
+
 const size = 100000;
 const blocks = new Array(size);
 for (let i = 0; i < size; i++) {
@@ -104,19 +144,31 @@ for (let i = 0; i < size; i++) {
 
 const str = blocks.join("&é\"'-è_çà)=~#{[|`\\^@]}$£¤*µ!§:/;.,?<>²'");
 
-const UTF8ArrayToStringFunctions = [
+const functions = [
     UTF8ArrayToStringUTF8DecoderLoop,
     UTF8ArrayToStringUTF8DecoderIndexOf,
+    UTF8ArrayToStringUTF8DecoderKnown,
     UTF8ArrayToStringFromCharCode,
-    UTF8ArrayToStringBufferIndexOf,
+    UTF8ArrayToStringFromCharCodeKnown,
     UTF8ArrayToStringBufferLoop,
+    UTF8ArrayToStringBufferIndexOf,
+    UTF8ArrayToStringBufferKnown,
 ];
 
-const fnLen = UTF8ArrayToStringFunctions.length;
-const lastFnName = UTF8ArrayToStringFunctions[fnLen - 1].name;
+const fnLen = functions.length;
+const lastFnName = functions[fnLen - 1].name;
+const longestName = (() => {
+    let max = 0;
+    functions.forEach(({name}) => {
+        if (max < name.length) {
+            max = name.length;
+        }
+    });
+    return max;
+})();
 
 // check functions before benchmarking
-UTF8ArrayToStringFunctions.forEach(fn => {
+functions.forEach(fn => {
     const c_string = c_str(str);
     const u8ArrayBuffer = Buffer.from(c_string.buffer);
     assert.strictEqual(fn(c_string, 0, Number.POSITIVE_INFINITY, c_string.buffer, u8ArrayBuffer), str);
@@ -124,25 +176,30 @@ UTF8ArrayToStringFunctions.forEach(fn => {
 
 const {Benchmark, Suite} = require("benchmark");
 const suite = new Suite();
-Benchmark.options.maxTime = 30;
+
+Benchmark.options.maxTime = process.env.MAX_TIME && /^\d+$/.test(process.env.MAX_TIME) ? parseInt(process.env.MAX_TIME, 10) : 5;
 
 const suiteAdd = string => {
     const c_string = c_str(string);
     const u8ArrayBuffer = Buffer.from(c_string.buffer);
 
-    UTF8ArrayToStringFunctions.forEach(fn => {
+    functions.forEach(fn => {
         const {name} = fn;
-        suite.add((name.padEnd(37, " ") + string.length).padEnd(44, " "), () => {
+        suite.add(name.padEnd(longestName, " ") + " " + String(length).padEnd(8, " "), () => {
             fn(c_string, 0, Number.POSITIVE_INFINITY, c_string.buffer, u8ArrayBuffer);
         });
     });
 };
 
-for (let i = 10; i < 400; i += 10) {
+for (let i = 10; i < 50; i += 10) {
     suiteAdd(str.slice(0, i));
 }
 
-for (let i = 400; i < 1000; i += 100) {
+for (let i = 50; i < 300; i += 50) {
+    suiteAdd(str.slice(0, i));
+}
+
+for (let i = 300; i < 1000; i += 100) {
     suiteAdd(str.slice(0, i));
 }
 
@@ -166,7 +223,7 @@ suite
                 return i === 0 || arr[0].compare(bench) === 0;
             });
 
-            console.log(`Fastest is ${ " ".repeat(36) }${ fastest.map(({name}) => name.replace(/\s*\d+\s*$/, "")) }\n`);
+            console.log(`${ "Fastest is".padEnd(longestName, " ") } ${ " ".repeat(8) } ${ fastest.map(({name}) => name.replace(/\s*\d+\s*$/, "")) }\n`);
         }
     })
     .on("complete", function() {

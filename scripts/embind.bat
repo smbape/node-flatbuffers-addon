@@ -23,13 +23,13 @@
 
 @SET CMAKE_TOOLCHAIN_FILE=%EMSDK%\upstream\emscripten\cmake\Modules\Platform\Emscripten.cmake
 
-@CALL emcc.bat -v
+@CALL emcc.bat -v > NUL
 @IF %ERRORLEVEL% NEQ 0 (
     @CALL emsdk install latest || @ECHO "Failed installing latest emsdk" 2>&1 & EXIT /B !ERRORLEVEL!
     @CALL emsdk activate --embedded latest || @ECHO "Failed to activate latest emsdk" 2>&1 & EXIT /B !ERRORLEVEL!
 )
 
-mingw32-make.exe -v
+mingw32-make.exe -v > NUL
 @IF %ERRORLEVEL% NEQ 0 (
     @CALL emsdk install mingw-7.1.0-64bit || @ECHO "Failed to install mingw-7.1.0-64bit" 2>&1 & EXIT /B !ERRORLEVEL!
     @CALL emsdk activate --embedded mingw-7.1.0-64bit || @ECHO "Failed to activate mingw-7.1.0-64bit" 2>&1 & EXIT /B !ERRORLEVEL!
@@ -46,7 +46,7 @@ mingw32-make.exe -v
     @CALL git fetch origin master --depth 1
     @CALL git clean -xdf
     @CALL git checkout master
-    @REM @CALL git apply -v "%ROOT_DIR%\patches\emscripten-optimze-nodejs-env.patch" || @ECHO "Failed to patch emscripten" 2>&1 & EXIT /B !ERRORLEVEL!
+    @CALL git apply -v "%ROOT_DIR%\patches\emscripten-optimze-nodejs-env.patch" || @ECHO "Failed to patch emscripten" 2>&1 & EXIT /B !ERRORLEVEL!
 ) ELSE (
     @CALL git pull || @ECHO "Failed to pull emscripten" 2>&1 & EXIT /B !ERRORLEVEL!
 )

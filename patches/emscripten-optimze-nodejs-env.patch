@@ -1,36 +1,97 @@
+diff --git a/emscripten.py b/emscripten.py
+index bdbb0f0..2898c22 100644
+--- a/emscripten.py
++++ b/emscripten.py
+@@ -2409,7 +2409,7 @@ var %(mangled)s = Module["%(mangled)s"] = createExportWrapper("%(name)s", asm);
+       # first use.
+       wrappers.append('''\
+ /** @type {function(...*):?} */
+-var %(mangled)s = Module["%(mangled)s"] = function() {
++var %(mangled)s = Module["%(mangled)s"] = Module["asm"] && Module["asm"]["%(name)s"] || function() {
+   return (%(mangled)s = Module["%(mangled)s"] = Module["asm"]["%(name)s"]).apply(null, arguments);
+ };
+ ''' % {'mangled': mangled, 'name': name})
 diff --git a/src/embind/embind.js b/src/embind/embind.js
-index 9161c7d..ba7e363 100644
+index d37502c..e1257cd 100644
 --- a/src/embind/embind.js
 +++ b/src/embind/embind.js
-@@ -630,7 +630,13 @@ var LibraryEmbind = {
- 
-     registerType(rawType, {
-         name: name,
--        'fromWireType': function(value) {
-+        'fromWireType': ENVIRONMENT_IS_NODE && stdStringIsUTF8 ? function(value) {
-+          var decodeStartPtr = value + 4;
-+          var length = HEAPU32[value >> 2];
-+          var str = HEAPBUFFER.toString("utf8", decodeStartPtr, decodeStartPtr + length);
-+          _free(value);
-+          return str;
-+        } : function(value) {
-             var length = HEAPU32[value >> 2];
- 
+@@ -636,6 +636,15 @@ var LibraryEmbind = {
              var str;
-@@ -1326,6 +1332,12 @@ var LibraryEmbind = {
+             if (stdStringIsUTF8) {
+                 var decodeStartPtr = value + 4;
++
++                // faster implementation of UTF8ToString for NodeJS when length is known
++                // see node-flatbuffers-addon/benchmark/benchmark-UTF8ArrayToString.js
++                if (ENVIRONMENT_IS_NODE && length >= 40) {
++                  str = HEAPBUFFER.toString("utf8", decodeStartPtr, decodeStartPtr + length);
++                  _free(value);
++                  return str;
++                }
++
+                 // Looping here to support possible embedded '0' bytes
+                 for (var i = 0; i <= length; ++i) {
+                     var currentBytePtr = value + 4 + i;
+@@ -668,20 +677,14 @@ var LibraryEmbind = {
+                 value = new Uint8Array(value);
+             }
+ 
+-            var getLength;
+             var valueIsOfTypeString = (typeof value === 'string');
+ 
+             if (!(valueIsOfTypeString || value instanceof Uint8Array || value instanceof Uint8ClampedArray || value instanceof Int8Array)) {
+                 throwBindingError('Cannot pass non-string to std::string');
+             }
+-            if (stdStringIsUTF8 && valueIsOfTypeString) {
+-                getLength = function() {return lengthBytesUTF8(value);};
+-            } else {
+-                getLength = function() {return value.length;};
+-            }
+ 
+             // assumes 4-byte alignment
+-            var length = getLength();
++            var length = stdStringIsUTF8 && valueIsOfTypeString ? lengthBytesUTF8(value) : value.length;
+             var ptr = _malloc(4 + length + 1);
+ #if CAN_ADDRESS_2GB
+             ptr >>>= 0;
+@@ -1297,6 +1300,7 @@ var LibraryEmbind = {
+             var setterArgumentType = fieldTypes[i + fieldRecords.length];
+             var setter = field.setter;
+             var setterContext = field.setterContext;
++            var _runDestructors = runDestructors; // Reduce closure env lookup
+             fields[fieldName] = {
+                 read: function(ptr) {
+                     return getterReturnType['fromWireType'](
+@@ -1305,32 +1309,48 @@ var LibraryEmbind = {
+                 write: function(ptr, o) {
+                     var destructors = [];
+                     setter(setterContext, ptr, setterArgumentType['toWireType'](destructors, o));
+-                    runDestructors(destructors);
++                    _runDestructors(destructors);
+                 }
              };
          });
  
 +        var fieldNames = Object.keys(fields);
-+        var fieldValues = fieldNames.map(function(i) {
-+            return fields[i];
++        var fieldReads = fieldNames.map(function(i) {
++            return fields[i].read;
++        });
++        var fieldWrites = fieldNames.map(function(i) {
++            return fields[i].write;
 +        });
 +        var fieldsCount = fieldNames.length;
 +
          return [{
              name: reg.name,
              'fromWireType': function(ptr) {
-@@ -1337,16 +1349,18 @@ var LibraryEmbind = {
+                 var rv = {};
+-                for (var i in fields) {
+-                    rv[i] = fields[i].read(ptr);
++                for (var i = 0, fieldName, fieldRead; i < fieldsCount; i++) {
++                    fieldName = fieldNames[i];
++                    fieldRead = fieldReads[i];
++                    rv[fieldName] = fieldRead(ptr);
+                 }
+                 rawDestructor(ptr);
                  return rv;
              },
              'toWireType': function(destructors, o) {
@@ -39,7 +100,7 @@ index 9161c7d..ba7e363 100644
                  // assume all fields are present without checking.
 -                for (var fieldName in fields) {
 -                    if (!(fieldName in o)) {
--                        throw new TypeError('Missing field');
+-                        throw new TypeError('Missing field:  "' + fieldName + '"');
 +                for (var i in fields) {
 +                    if (!(i in o)) {
 +                        throw new TypeError('Missing field ' + i);
@@ -49,16 +110,34 @@ index 9161c7d..ba7e363 100644
                  var ptr = rawConstructor();
 -                for (fieldName in fields) {
 -                    fields[fieldName].write(ptr, o[fieldName]);
-+                for (var i = 0; i < fieldsCount; i++) {
-+                    fieldValues[i].write(ptr, o[fieldNames[i]]);
++                for (var i = 0, fieldName, fieldWrite, fieldValue; i < fieldsCount; i++) {
++                    fieldName = fieldNames[i];
++                    fieldWrite = fieldWrites[i];
++                    fieldValue = o[fieldName];
++                    fieldWrite(ptr, fieldValue);
                  }
                  if (destructors !== null) {
                      destructors.push(rawDestructor, ptr);
+@@ -1701,11 +1721,9 @@ var LibraryEmbind = {
+         throwInternalError('Both smartPtrType and smartPtr must be specified');
+     }
+     record.count = { value: 1 };
+-    return attachFinalizer(Object.create(prototype, {
+-        $$: {
+-            value: record,
+-        },
+-    }));
++    var instance = Object.create(prototype);
++    instance.$$ = record;
++    return instance;
+   },
+ 
+   $init_ClassHandle__deps: [
 diff --git a/src/preamble.js b/src/preamble.js
-index 808bab0..ddf2002 100644
+index b180125..435233e 100644
 --- a/src/preamble.js
 +++ b/src/preamble.js
-@@ -331,6 +331,8 @@ function alignUp(x, multiple) {
+@@ -324,6 +324,8 @@ function alignUp(x, multiple) {
  var HEAP,
  /** @type {ArrayBuffer} */
    buffer,
@@ -67,7 +146,7 @@ index 808bab0..ddf2002 100644
  /** @type {Int8Array} */
    HEAP8,
  /** @type {Uint8Array} */
-@@ -350,6 +352,9 @@ var HEAP,
+@@ -343,6 +345,9 @@ var HEAP,
  
  function updateGlobalBufferAndViews(buf) {
    buffer = buf;
@@ -78,64 +157,59 @@ index 808bab0..ddf2002 100644
    Module['HEAP16'] = HEAP16 = new Int16Array(buf);
    Module['HEAP32'] = HEAP32 = new Int32Array(buf);
 diff --git a/src/runtime_strings.js b/src/runtime_strings.js
-index 328485b..6111549 100644
+index f378e89..eabf436 100644
 --- a/src/runtime_strings.js
 +++ b/src/runtime_strings.js
-@@ -80,6 +80,41 @@ function UTF8ArrayToString(u8Array, idx, maxBytesToRead) {
- #endif // TEXTDECODER == 2
- }
- 
-+if (ENVIRONMENT_IS_NODE) {
-+    var isTypedArray = typeof BigInt64Array === "function" ? function(obj) {
-+        return (obj instanceof Int8Array) ||
-+            (obj instanceof Uint8Array) ||
-+            (obj instanceof Uint8ClampedArray) ||
-+            (obj instanceof Int16Array) ||
-+            (obj instanceof Uint16Array) ||
-+            (obj instanceof Int32Array) ||
-+            (obj instanceof Uint32Array) ||
-+            (obj instanceof Float32Array) ||
-+            (obj instanceof Float64Array) ||
-+            (obj instanceof BigInt64Array) ||
-+            (obj instanceof BigUint64Array);
-+    } : function(obj) {
-+        return (obj instanceof Int8Array) ||
-+            (obj instanceof Uint8Array) ||
-+            (obj instanceof Uint8ClampedArray) ||
-+            (obj instanceof Int16Array) ||
-+            (obj instanceof Uint16Array) ||
-+            (obj instanceof Int32Array) ||
-+            (obj instanceof Uint32Array) ||
-+            (obj instanceof Float32Array) ||
-+            (obj instanceof Float64Array);
-+    };
-+
-+    // faster implementation of UTF8ArrayToString for NodeJS
-+    // see node-flatbuffers-addon/benchmark/benchmark-UTF8ArrayToString.js
-+    function UTF8ArrayToString(u8Array, idx, maxBytesToRead) {
-+      var buf = isTypedArray(u8Array) ? u8Array.buffer === buffer ? HEAPBUFFER : Buffer.from(u8Array.buffer) : Buffer.from(u8Array);
-+      buf = buf.slice(idx, maxBytesToRead > 0 && idx + maxBytesToRead < buf.length ? idx + maxBytesToRead : buf.length);
-+      var endPtr = buf.indexOf(0);
-+      return buf.toString("utf8", 0, endPtr === -1 ? buf.length : endPtr);
-+    }
-+}
-+
- // Given a pointer 'ptr' to a null-terminated UTF8-encoded string in the emscripten HEAP, returns a
- // copy of that string as a Javascript String object.
- // maxBytesToRead: an optional length that specifies the maximum number of bytes to read. You can omit
-@@ -123,6 +158,15 @@ function stringToUTF8Array(str, outU8Array, outIdx, maxBytesToWrite) {
+@@ -138,6 +138,15 @@ function stringToUTF8Array(str, heap, outIdx, maxBytesToWrite) {
    if (!(maxBytesToWrite > 0)) // Parameter maxBytesToWrite is not optional. Negative values, 0, null, undefined and false each don't write out any bytes.
      return 0;
  
-+  if (ENVIRONMENT_IS_NODE && maxBytesToWrite > 30) {
-+    // faster implementation of stringToUTF8Array for NodeJS
-+    // see node-flatbuffers-addon/benchmark/benchmark-stringToUTF8Array.js
-+    var buf = outU8Array.buffer === buffer ? HEAPBUFFER : Buffer.from(outU8Array.buffer);
++  // faster implementation of stringToUTF8Array for NodeJS
++  // see node-flatbuffers-addon/benchmark/benchmark-stringToUTF8Array.js
++  if (ENVIRONMENT_IS_NODE && str.length > (ENVIRONMENT_IS_NODE_WINDOWS ? 30 : 50)) {
++    var buf = heap.buffer === buffer ? HEAPBUFFER : Buffer.from(heap.buffer);
 +    var length = buf.utf8Write(str, outIdx, maxBytesToWrite);
-+    outU8Array[outIdx + length] = 0;
++    heap[outIdx + length] = 0;
 +    return length;
 +  }
 +
    var startIdx = outIdx;
    var endIdx = outIdx + maxBytesToWrite - 1; // -1 for string null terminator.
    for (var i = 0; i < str.length; ++i) {
+@@ -190,4 +199,22 @@ function stringToUTF8(str, outPtr, maxBytesToWrite) {
+ }
+ 
+ // Returns the number of bytes the given Javascript string takes if encoded as a UTF8 byte array, EXCLUDING the null terminator byte.
+-{{{ lengthBytesUTF8 }}}
++function lengthBytesUTF8(str) {
++  // faster implementation of lengthBytesUTF8 for NodeJS
++  // see node-flatbuffers-addon/benchmark/benchmark-lengthBytesUTF8.js
++  if (ENVIRONMENT_IS_NODE && str.length > 10) {
++    return Buffer.byteLength(str);
++  }
++  var len = 0;
++  for (var i = 0; i < str.length; ++i) {
++    // Gotcha: charCodeAt returns a 16-bit word that is a UTF-16 encoded code unit, not a Unicode code point of the character! So decode UTF16->UTF32->UTF8.
++    // See http://unicode.org/faq/utf_bom.html#utf16-3
++    var u = str.charCodeAt(i); // possibly a lead surrogate
++    if (u >= 0xD800 && u <= 0xDFFF) u = 0x10000 + ((u & 0x3FF) << 10) | (str.charCodeAt(++i) & 0x3FF);
++    if (u <= 0x7F) ++len;
++    else if (u <= 0x7FF) len += 2;
++    else if (u <= 0xFFFF) len += 3;
++    else len += 4;
++  }
++  return len;
++}
+diff --git a/src/shell.js b/src/shell.js
+index 4023be1..bf7e510 100644
+--- a/src/shell.js
++++ b/src/shell.js
+@@ -101,6 +101,8 @@ ENVIRONMENT_IS_NODE = typeof process === 'object' && typeof process.versions ===
+ ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIRONMENT_IS_WORKER;
+ #endif // ENVIRONMENT
+ 
++var ENVIRONMENT_IS_NODE_WINDOWS = ENVIRONMENT_IS_NODE && process.platform === 'win32';
++
+ #if ASSERTIONS
+ if (Module['ENVIRONMENT']) {
+   throw new Error('Module.ENVIRONMENT has been deprecated. To force the environment, use the ENVIRONMENT compile-time option (for example, -s ENVIRONMENT=web or -s ENVIRONMENT=node)');

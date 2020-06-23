@@ -1,3 +1,5 @@
+const {hasOwnProperty: hasProp} = Object.prototype;
+
 const c_str = str => {
     const len = Buffer.byteLength(str, "utf8");
     const buffer = Buffer.allocUnsafe(len + 1);
@@ -34,39 +36,44 @@ const isTypedArray = typeof BigInt64Array === "function" ? obj => {
 const setOption = (options, prop, basename, ext, stringify) => {
     const prop_contents = `${ prop }_contents`;
     const prop_length = `${ prop }_length`;
+    let contents = hasProp.call(options, prop_contents) ? options[prop_contents] : null;
+    let value = hasProp.call(options, prop) ? options[prop] : null;
 
-    if (options[prop_contents] == null && options[prop] != null) {
-        options[prop_contents] = options[prop];
-        options[prop] = null;
+    if (contents == null && value != null) {
+        contents = value;
+        value = null;
     }
 
-    if (options[prop] == null && options[prop_contents] != null) {
-        options[prop] = `${ basename || prop }.${ ext }`;
+    if (value == null && contents != null) {
+        value = `${ basename || prop }.${ ext }`;
     }
 
-    if (stringify && options[prop_contents] !== null && typeof options[prop_contents] === "object" && !isTypedArray(options[prop_contents])) {
-        options[prop_contents] = JSON.stringify(options[prop_contents]);
+    if (stringify && contents !== null && typeof contents === "object" && !isTypedArray(contents)) {
+        contents = JSON.stringify(contents);
     }
 
-    if (typeof options[prop_contents] === "string") {
-        options[prop_contents] = c_str(options[prop_contents]);
+    if (typeof contents === "string") {
+        contents = c_str(contents);
     }
 
-    if (options[prop_contents] && !isTypedArray(options[prop_contents])) {
+    if (contents && !isTypedArray(contents)) {
         throw new TypeError(`${ prop }_contents must be a string or a TypedArray`);
     }
 
-    if (options[prop_length] == null && options[prop_contents]) {
-        options[prop_length] = options[prop_contents].length;
+    if (options[prop_length] == null && contents) {
+        options[prop_length] = contents.length;
     }
 
-    if (options[prop_contents] && isTypedArray(options[prop])) {
+    if (contents && isTypedArray(value)) {
         throw new TypeError(`if ${ prop } is a TypedArray, ${ prop }_contents must be null or undefined`);
     }
 
-    if (options[prop] && typeof options[prop] !== "string") {
+    if (value && typeof value !== "string") {
         throw new TypeError(`${ prop } must be a string`);
     }
+
+    options[prop_contents] = contents;
+    options[prop] = value;
 };
 
 const schemaOptions = options => {
@@ -205,7 +212,7 @@ require("../lib/flatbuffers_addon").init({
         }
     };
 
-    const emscripten_addon_external = {
+    const emscripten_addon_external = Object.assign({}, emscripten_addon_internal, {
         js: options => {
             options = schemaOptions(Object.assign({}, options));
 
@@ -220,39 +227,26 @@ require("../lib/flatbuffers_addon").init({
                 options.conform_include_directories,
                 options
             );
-        },
-
-        binary: options => {
-            options = schemaOptions(Object.assign({}, options));
-
-            setOption(options, "json", "data", "json", true);
-
-            if (options.schema_binary && options.json_contents != null) {
-                throw new TypeError("if schema_binary option is true, json_contents must be null or undefined");
-            }
-
-            return Module.GenerateBinary(
-                options.schema,
-                options.schema_contents,
-                options.schema_length,
-                options.include_directories,
-                options.conform,
-                options.conform_contents,
-                options.conform_length,
-                options.conform_include_directories,
-                options.json,
-                options.json_contents,
-                options.json_length,
-                options
-            );
         }
-    };
+    });
 
     const native_addon = require("../");
 
+    for (let i = 0; i < 10; i++) {
+        testBinary(emscripten_addon_internal);
+    }
+
+    for (let i = 0; i < 10; i++) {
+        testBinary(emscripten_addon_external);
+    }
+
+    for (let i = 0; i < 10; i++) {
+        testBinary(native_addon);
+    }
+
     const {Benchmark, Suite} = require("benchmark");
     const suite = new Suite();
-    Benchmark.options.maxTime = 15;
+    Benchmark.options.maxTime = process.env.MAX_TIME && /^\d+$/.test(process.env.MAX_TIME) ? parseInt(process.env.MAX_TIME, 10) : 5;
 
     suite
         .add("emscripten_addon_internal testBinary", () => {
